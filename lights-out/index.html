@@ -20,6 +20,10 @@ body { -webkit-font-smoothing: antialiased; }
 #result-value { font-size: clamp(52px, 5vw, 72px); font-weight: 400; line-height: 1.13; letter-spacing: -2.5px; font-variant-numeric: tabular-nums; }
 #result-value span { font-size: inherit; letter-spacing: -2px; }
 #start-hint { margin: 8px 0 0; color: #b6b6b6; font-size: 20px; line-height: 1.4; }
+.best-summary { display: flex; justify-content: center; align-items: baseline; gap: 13px; margin-top: 17px; font-size: 12px; line-height: 1.4; color: #999; white-space: nowrap; }
+.best-summary strong { font-weight: 400; color: #ddd; }
+.best-label { color: #ddd; }
+.stage.long-score .best-summary { font-size: 10px; gap: 8px; }
 .stage.false-start #result-value { color: #ff0026; }
 .chart-area { grid-area: chart; min-width: 0; touch-action: pan-y; }
 #chart { width: 100%; outline: 0; user-select: none; -webkit-user-select: none; touch-action: pan-y; cursor: grab; }
@@ -34,13 +38,21 @@ body { -webkit-font-smoothing: antialiased; }
 #history-position:disabled { opacity: .25; }
 .table-area { grid-area: table; min-width: 0; }
 .table-scroll { max-height: 298px; overflow: auto; overscroll-behavior: contain; outline: 0; scrollbar-color: #444 #000; scrollbar-width: thin; }
-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 17px; line-height: 1.25; font-variant-numeric: tabular-nums; }
+table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: right; font-size: 17px; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.round-column { width: 14%; }
+.score-column { width: 24%; }
+.average-column { width: 19%; }
+.input-column { width: 24%; }
 th, td { padding: 10px 10px; border-bottom: 1px solid #414141; font-weight: 400; white-space: nowrap; }
 th { position: sticky; top: 0; background: #000; border-bottom-color: #888; font-weight: 500; }
 th:first-child, td:first-child { padding-left: 0; }
 th:last-child, td:last-child { padding-right: 0; }
 tr.false-start { color: #ff0026; }
 tr.false-start td { font-weight: 600; }
+.score-cell { position: relative; }
+table th:nth-child(2), table td:nth-child(2) { padding-right: 24px; }
+table th:last-child, table td:last-child { text-align: center; padding-left: 4px; padding-right: 4px; }
+.false-start-marker { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 400; letter-spacing: .3px; color: #ff6579; }
 #storage-note { grid-area: storage; color: #b6b6b6; font-size: 12px; margin-top: 24px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 [hidden] { display: none !important; }
@@ -59,6 +71,7 @@ body.is-running .light { width: clamp(38px, 12vw, 64px); }
   .light { width: clamp(38px, 12vw, 58px); }
   #result-value { font-size: clamp(54px, 15vw, 68px); letter-spacing: -2.8px; }
   #start-hint { font-size: 17px; margin-top: 9px; }
+  .best-summary { font-size: clamp(10px, 2.8vw, 12px); gap: 9px; margin-top: 14px; }
   .chart-area { margin-bottom: 27px; }
   .table-scroll { max-height: 420px; }
   table { font-size: 15px; }
@@ -80,21 +93,26 @@ body.is-running .light { width: clamp(38px, 12vw, 64px); }
 .stage.long-score #result-value { font-size: clamp(36px, 8vw, 48px); }
 @media(min-width:761px) { .lights { gap: clamp(10px, 2vw, 22px); } }
 
+.history-tabs { display: flex; gap: 19px; margin-bottom: 8px; }
+.history-tabs button { appearance: none; border: 0; border-bottom: 1px solid transparent; border-radius: 0; padding: 0 0 7px; margin: 0; background: transparent; color: #888; font: inherit; font-size: 14px; cursor: pointer; }
+.history-tabs button[aria-selected=true] { color: #eee; border-bottom-color: #aaa; }
+.history-tabs button:focus-visible { outline: 1px solid #888; outline-offset: 3px; }
+
 </style>
 </head>
 <body>
   <main class="app" data-desktop-layout="b">
     <section class="stage" tabindex="0" aria-label="Reaction test. Press a key, mouse button, or touch to start.">
       <div class="lights" role="img" aria-label="All five lights off"><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i></div>
-      <div class="result-area"><div id="result-value">—<span> ms</span></div><p id="start-hint">Open in a browser to play — this preview may not run JavaScript.</p></div>
+      <div class="result-area"><div id="result-value">—<span> ms</span></div><p id="start-hint">Open in a browser to play — this preview may not run JavaScript.</p><div class="best-summary" aria-label="Personal bests in milliseconds"><span class="best-label">Best:</span><span>single <strong id="best-single">—</strong></span><span>ao5 <strong id="best-ao5">—</strong></span><span>ao12 <strong id="best-ao12">—</strong></span></div></div>
     </section>
     <section class="chart-area" data-control aria-label="Reaction graph and history browsing">
       <div class="history-navigation"><span id="window-label">0 rounds</span><label class="window-size-label">view <input id="window-size" type="number" inputmode="numeric" min="1" value="50" aria-label="Number of visible attempts"></label></div>
       <div id="chart" tabindex="0" role="group" aria-label="Reaction history. Drag to browse, arrow keys to move, plus or minus to zoom."></div>
       <div class="overview"><div id="overview-graph" aria-hidden="true"></div><input id="history-position" type="range" min="0" max="0" value="0" aria-label="Browse earlier or later history"></div>
     </section>
-    <section class="table-area" data-control aria-label="Attempt history">
-      <div class="table-scroll" tabindex="0"><table><thead><tr><th scope="col">#</th><th scope="col">ms</th><th scope="col">ao5</th><th scope="col">ao12</th><th scope="col">Input</th></tr></thead><tbody id="history-rows"></tbody></table></div>
+    <section class="table-area" data-control aria-label="Attempt history"><div class="history-tabs" role="tablist" aria-label="History view"><button type="button" id="recent-tab" role="tab" aria-selected="true" aria-controls="history-panel">Recent</button><button type="button" id="best-tab" role="tab" aria-selected="false" aria-controls="history-panel" tabindex="-1">Best</button></div>
+      <div class="table-scroll" id="history-panel" role="tabpanel" tabindex="0"><table><colgroup><col class="round-column"><col class="score-column"><col class="average-column"><col class="average-column"><col class="input-column"></colgroup><thead><tr><th scope="col">#</th><th scope="col">ms</th><th scope="col">ao5</th><th scope="col">ao12</th><th scope="col">Input</th></tr></thead><tbody id="history-rows"></tbody></table></div>
     </section>
     <p id="storage-note" role="status" hidden></p>
     <p id="announcement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
@@ -252,7 +270,8 @@ class ReactionEngine {
     this.roundInputs = new Set([event.inputId]);
     this.attempt = {
       startedAtMs: Number.isFinite(event.eventTimeMs) ? event.eventTimeMs : this.now(), startedHandlerAtMs: this.now(), preparedInput: null,
-      allLightsOnMs: null, sampledDelayMs: null,
+      allLightsOnMs: null, fixedHoldMs: LIGHT_INTERVAL_MS,
+      scheduledRandomWaitStartMs: null, sampledDelayMs: null,
       scheduledOffMs: null, softwareOnsetMs: null,
     };
     this.state = 'countdown';
@@ -279,8 +298,12 @@ class ReactionEngine {
         this.state = 'waiting';
         this.onChange(this);
         this.attempt.allLightsOnMs = this.now();
+        // Keep all five on for one complete preparation interval before the
+        // independent exponential component begins. Scoring still opens at
+        // light five, so the hold does not extend preparation-release grace.
+        this.attempt.scheduledRandomWaitStartMs = this.attempt.allLightsOnMs + this.attempt.fixedHoldMs;
         this.attempt.sampledDelayMs = exponentialDelay(this.random());
-        this.attempt.scheduledOffMs = this.attempt.allLightsOnMs + this.attempt.sampledDelayMs;
+        this.attempt.scheduledOffMs = this.attempt.scheduledRandomWaitStartMs + this.attempt.sampledDelayMs;
         this.previousFrameMs = frameTime;
         this.frameIntervals = [];
         this.maxFrameGapMs = 0;
@@ -329,6 +352,9 @@ class ReactionEngine {
   clearHeld() { this.held.clear(); this.roundInputs.clear(); this.releaseIds.clear(); }
 }
 
+const RECENT_LIMIT = 1000;
+const BEST_LIMIT = 20;
+
 // Each aoN drops exactly one fastest and one slowest score. Penalties remain
 // numeric 500 ms scores; slow successful reactions are never clipped.
 function rollingAverage(records, endIndex, size) {
@@ -341,7 +367,7 @@ function rollingAverage(records, endIndex, size) {
 }
 
 function historyWindow(length, requestedCount = 50, requestedEnd = length) {
-  const count = Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, Math.round(Number(requestedCount)) || 50));
+  const count = Math.max(1, Math.min(RECENT_LIMIT, Math.round(Number(requestedCount)) || 50));
   const end = Math.max(0, Math.min(length, Math.round(Number(requestedEnd)) || 0));
   return { count, end, start: Math.max(0, end - count) };
 }
@@ -349,8 +375,107 @@ function historyWindow(length, requestedCount = 50, requestedEnd = length) {
 function tableRows(records, viewport) {
   return records.slice(viewport.start, viewport.end).map((record, offset) => {
     const index = viewport.start + offset;
-    return { record, round: index + 1, ao5: rollingAverage(records, index, 5), ao12: rollingAverage(records, index, 12) };
+    return { record, round: record.round || index + 1, ao5: Object.prototype.hasOwnProperty.call(record, 'ao5') ? record.ao5 : rollingAverage(records, index, 5), ao12: Object.prototype.hasOwnProperty.call(record, 'ao12') ? record.ao12 : rollingAverage(records, index, 12) };
   });
+}
+
+function updateBests(previous, records, index = records.length - 1) {
+  const best = { ...previous };
+  const record = records[index];
+  if (!record) return best;
+  if (!record.falseStart && Number.isFinite(record.reactionMs) && record.reactionMs >= 0) {
+    best.single = best.single === null ? record.reactionMs : Math.min(best.single, record.reactionMs);
+  }
+  for (const size of [5, 12]) {
+    const average = rollingAverage(records, index, size), key = `ao${size}`;
+    if (average !== null) best[key] = best[key] === null ? average : Math.min(best[key], average);
+  }
+  return best;
+}
+
+function personalBests(records) {
+  let best = { single: null, ao5: null, ao12: null };
+  for (let index = 0; index < records.length; index++) best = updateBests(best, records, index);
+  return best;
+}
+
+
+const emptyBests = () => ({ single: null, ao5: null, ao12: null });
+const valid = record => record && Number.isFinite(record.scoreMs) && record.scoreMs >= 0 && typeof record.falseStart === 'boolean' && (record.falseStart ? record.reactionMs === null : Number.isFinite(record.reactionMs) && record.reactionMs >= 0);
+const average = value => Number.isFinite(value) && value >= 0 ? value : null;
+function compact(record) {
+  const { trialFrameIntervalsMs, recentFrameIntervalsMs, ...stored } = record;
+  return stored;
+}
+function topRecords(candidates) {
+  const byRound = new Map();
+  for (const record of candidates) if (valid(record) && !record.falseStart) byRound.set(record.round, compact(record));
+  return [...byRound.values()].sort((a, b) => a.reactionMs - b.reactionMs || a.round - b.round).slice(0, BEST_LIMIT);
+}
+function mergeStoredBests(previous, record) {
+  const best = { ...previous };
+  const values = { single: record.falseStart ? null : record.reactionMs, ao5: record.ao5, ao12: record.ao12 };
+  for (const key of ['single', 'ao5', 'ao12']) {
+    const value = average(values[key]);
+    if (value !== null) best[key] = best[key] === null ? value : Math.min(best[key], value);
+  }
+  return best;
+}
+function emptyHistory() {
+  return { records: [], bestRecords: [], lifetimeBests: emptyBests(), totalAttempts: 0, rollingScores: [], latest: null };
+}
+function appendHistory(state, input) {
+  if (!valid(input)) throw new TypeError('Invalid reaction record');
+  const scores = [...state.rollingScores.map(scoreMs => ({ scoreMs })), input];
+  const index = scores.length - 1;
+  const record = { ...input, round: state.totalAttempts + 1, ao5: rollingAverage(scores, index, 5), ao12: rollingAverage(scores, index, 12) };
+  // Lifetime aggregates and independently retained top records are captured
+  // before recent history is pruned. The rolling tail is independent too.
+  const lifetimeBests = updateBests(state.lifetimeBests, scores);
+  const bestRecords = topRecords([...state.bestRecords, record]);
+  return {
+    records: [...state.records, record].slice(-RECENT_LIMIT), bestRecords, lifetimeBests,
+    totalAttempts: record.round, rollingScores: [...state.rollingScores, record.scoreMs].slice(-11), latest: compact(record),
+  };
+}
+function restoreHistory(recentSaved, bestSaved = null) {
+  if (!recentSaved || recentSaved.version !== 3) {
+    let state = emptyHistory();
+    // Stream legacy data and preserve its best ledger before pruning. A
+    // separately saved ledger also survives an absent/corrupt recent buffer.
+    for (const record of Array.isArray(recentSaved?.records) ? recentSaved.records : []) if (valid(record)) state = appendHistory(state, record);
+    const migrated = bestSnapshot(state);
+    if (bestSaved?.version === 1) {
+      const supplied = bestSaved, newer = supplied.totalAttempts >= migrated.totalAttempts ? supplied : migrated;
+      const lifetimeBests = emptyBests();
+      for (const key of ['single', 'ao5', 'ao12']) {
+        const values = [average(migrated.lifetimeBests[key]), average(supplied.lifetimeBests?.[key])].filter(value => value !== null);
+        lifetimeBests[key] = values.length ? Math.min(...values) : null;
+      }
+      bestSaved = { ...newer, version: 1, bestRecords: topRecords([...migrated.bestRecords, ...(Array.isArray(supplied.bestRecords) ? supplied.bestRecords : [])]), lifetimeBests };
+    } else bestSaved = migrated;
+    recentSaved = recentSnapshot(state);
+  }
+  const normalize = record => ({ ...record, ao5: average(record.ao5), ao12: average(record.ao12) });
+  const records = (Array.isArray(recentSaved.records) ? recentSaved.records : []).filter(valid).filter(record => Number.isSafeInteger(record.round) && record.round > 0).slice(-RECENT_LIMIT).map(normalize);
+  const ledger = bestSaved?.version === 1 ? bestSaved : {};
+  const retainedBest = (Array.isArray(ledger.bestRecords) ? ledger.bestRecords : []).filter(valid).filter(record => Number.isSafeInteger(record.round) && record.round > 0).map(normalize);
+  const bestRecords = topRecords([...retainedBest, ...records]);
+  let lifetimeBests = emptyBests();
+  for (const key of ['single', 'ao5', 'ao12']) lifetimeBests[key] = average(ledger.lifetimeBests?.[key]);
+  for (const record of [...records, ...bestRecords]) lifetimeBests = mergeStoredBests(lifetimeBests, record);
+  let totalAttempts = Math.max(0, Number.isSafeInteger(recentSaved.totalAttempts) ? recentSaved.totalAttempts : 0, Number.isSafeInteger(ledger.totalAttempts) ? ledger.totalAttempts : 0);
+  for (const record of [...records, ...bestRecords]) totalAttempts = Math.max(totalAttempts, record.round);
+  const latest = valid(ledger.latest) && ledger.latest.round === totalAttempts ? normalize(ledger.latest) : records[records.length - 1] || null;
+  const tail = (Array.isArray(ledger.rollingScores) ? ledger.rollingScores : []).filter(score => Number.isFinite(score) && score >= 0).slice(-11);
+  const rollingScores = ledger.totalAttempts === totalAttempts && tail.length ? tail : records.slice(-11).map(record => record.scoreMs);
+  return { records, bestRecords, lifetimeBests, totalAttempts, rollingScores, latest };
+}
+function recentSnapshot(state, tableTab = 'recent') {
+  return { version: 3, records: state.records, totalAttempts: state.totalAttempts, tableTab };
+}
+function bestSnapshot(state) {
+  return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest };
 }
 
 // One trusted stream per device. Mouse chords produce pointermove events.
@@ -485,12 +610,14 @@ const storageKey = 'lights-out.reaction-lab.v2';
 const deviceLabel = { keyboard: 'Key', mouse: 'Mouse', touch: 'Touch', pen: 'Pen', trackpad: 'Trackpad', 'mouse-physical': 'Mouse' };
 const inputLabel = record => `${deviceLabel[record.device] || record.device} ${record.responseEdge === 'up' ? '↑' : '↓'}`;
 const uuid = () => globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-let records = [], lastRecord = null, renderedLights = -1, storageAvailable = true;
-try {
-  const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-  if (saved?.version === 2) records = (saved.records || []).filter(r => Number.isFinite(r.scoreMs) && r.scoreMs >= 0 && typeof r.falseStart === 'boolean' && (r.falseStart ? r.reactionMs === null : Number.isFinite(r.reactionMs)));
-} catch { storageAvailable = false; }
-lastRecord = records[records.length - 1] || null;
+const bestStorageKey = 'lights-out.reaction-lab.bests.v1';
+let recentSaved = null, bestSaved = null, storageAvailable = true;
+try { recentSaved = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch { storageAvailable = false; }
+try { bestSaved = JSON.parse(localStorage.getItem(bestStorageKey) || 'null'); } catch { storageAvailable = false; }
+let history = restoreHistory(recentSaved, bestSaved);
+let records = history.records, best = history.lifetimeBests, lastRecord = history.latest, renderedLights = -1;
+let tableTab = recentSaved?.tableTab === 'best' ? 'best' : 'recent';
+recentSaved = bestSaved = null; // release any large legacy snapshot after bounded migration
 let viewport = historyWindow(records.length), followLatest = true;
 let lastFrameHandledAt = performance.now();
 const MAX_FRAME_GAP_MS = 100;
@@ -502,16 +629,23 @@ const engine = new ReactionEngine({
   onChange: renderState,
   onResult: record => {
     lastRecord = { ...record, id: uuid(), completedAt: new Date().toISOString(), documentHasFocus: document.hasFocus() };
-    records.push(lastRecord);
+    const oldLength = records.length;
+    history = appendHistory(history, lastRecord);
+    records = history.records; best = history.lifetimeBests; lastRecord = history.latest;
     if (followLatest) viewport = historyWindow(records.length, viewport.count);
+    else viewport = historyWindow(records.length, viewport.count, Math.max(0, viewport.end - (oldLength + 1 - records.length)));
     save(); renderHistory();
   },
 });
 function save() {
-  try { localStorage.setItem(storageKey, JSON.stringify({ version: 2, records })); }
-  catch { storageAvailable = false; }
+  let bestSaved = false, recentSaved = false;
+  // Save the small independent ledger first, so pruning/quota pressure on the
+  // recent buffer cannot silently erase lifetime bests or original averages.
+  try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(history))); bestSaved = true; } catch {}
+  try { localStorage.setItem(storageKey, JSON.stringify(recentSnapshot(history, tableTab))); recentSaved = true; } catch {}
+  storageAvailable = bestSaved && recentSaved;
   $('#storage-note').hidden = storageAvailable;
-  $('#storage-note').textContent = 'Browser storage is unavailable or full. New results remain in memory for this visit.';
+  $('#storage-note').textContent = bestSaved ? 'Recent history could not be saved. Best records are saved separately.' : recentSaved ? 'Best records could not be saved. Recent history is saved.' : 'Browser storage is unavailable or full. New results remain in memory for this visit.';
 }
 function monitor(frameTime) {
   engine.observeFrame(frameTime);
@@ -586,21 +720,34 @@ function renderOverview() {
   $('#overview-graph').replaceChildren(svg);
 }
 function renderHistory() {
-  const rows = tableRows(records, viewport), body = $('#history-rows'); body.replaceChildren();
+  $('#best-single').textContent = best.single === null ? '—' : String(Math.round(best.single));
+  $('#best-ao5').textContent = best.ao5 === null ? '—' : best.ao5.toFixed(1);
+  $('#best-ao12').textContent = best.ao12 === null ? '—' : best.ao12.toFixed(1);
+  const chartRows = tableRows(records, viewport);
+  const rows = tableTab === 'best' ? history.bestRecords.map(record => ({ record, round: record.round, ao5: record.ao5, ao12: record.ao12 })) : [...chartRows].reverse();
+  const body = $('#history-rows'); body.replaceChildren();
+  $('#history-panel').setAttribute('aria-labelledby', tableTab === 'best' ? 'best-tab' : 'recent-tab');
+  for (const [id, selected] of [['recent-tab', tableTab === 'recent'], ['best-tab', tableTab === 'best']]) { const tab = $(`#${id}`); tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1; }
   const formatAverage = value => value === null ? '—' : value.toFixed(1);
-  for (const row of [...rows].reverse()) {
+  for (const row of rows) {
     const tr = document.createElement('tr'); tr.classList.toggle('false-start', row.record.falseStart);
     tr.dataset.round = row.round;
-    const values = [row.round, Math.round(row.record.scoreMs), formatAverage(row.record.falseStart ? null : row.ao5), formatAverage(row.record.falseStart ? null : row.ao12), row.record.falseStart ? 'False start' : inputLabel(row.record)];
+    const values = [row.round, Math.round(row.record.scoreMs), formatAverage(row.ao5), formatAverage(row.ao12), inputLabel(row.record)];
     for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
+    tr.children[1].className = 'score-cell';
+    if (row.record.falseStart) {
+      const status = document.createElement('span'); status.className = 'false-start-marker';
+      status.textContent = 'FS'; status.title = 'False start'; status.setAttribute('role', 'img'); status.setAttribute('aria-label', 'False start');
+      tr.children[1].append(status);
+    }
     tr.lastChild.title = inputLabel(row.record);
-    tr.lastChild.setAttribute('aria-label', `${row.record.falseStart ? 'False start · ' : ''}${inputLabel(row.record)}`);
+    tr.lastChild.setAttribute('aria-label', inputLabel(row.record));
     body.append(tr);
   }
-  renderChart(rows);
-  $('#window-label').textContent = rows.length ? `${followLatest ? 'Last ' + rows.length + ' attempts' : (viewport.start + 1) + '–' + viewport.end} · ${records.length} total` : 'No attempts yet';
+  renderChart(chartRows);
+  $('#window-label').textContent = chartRows.length ? `${followLatest ? 'Last ' + chartRows.length + ' attempts' : chartRows[0].round + '–' + chartRows[chartRows.length - 1].round} · ${history.totalAttempts} total` : 'No recent attempts';
   $('#window-size').value = viewport.count;
-  $('#window-size').max = Math.max(records.length, 50);
+  $('#window-size').max = Math.min(RECENT_LIMIT, Math.max(records.length, 50));
   $('#history-position').max = records.length;
   $('#history-position').min = 0;
   $('#history-position').value = viewport.end;
@@ -609,6 +756,14 @@ function renderHistory() {
 }
 function browse(end, count = viewport.count) {
   viewport = historyWindow(records.length, count, end); followLatest = viewport.end === records.length; renderHistory();
+}
+for (const [id, value] of [['recent-tab', 'recent'], ['best-tab', 'best']]) {
+  const tab = $(`#${id}`);
+  tab.addEventListener('click', () => { tableTab = value; save(); renderHistory(); });
+  tab.addEventListener('keydown', event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault(); tableTab = tableTab === 'recent' ? 'best' : 'recent'; save(); renderHistory(); $(`#${tableTab === 'best' ? 'best-tab' : 'recent-tab'}`).focus();
+  });
 }
 $('#window-size').addEventListener('change', event => browse(viewport.end, event.target.value));
 $('#history-position').addEventListener('input', event => browse(Math.max(Math.min(viewport.count, records.length), Number(event.target.value))));
