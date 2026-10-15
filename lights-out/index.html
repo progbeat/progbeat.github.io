@@ -34,8 +34,6 @@ body { -webkit-font-smoothing: antialiased; }
 .window-size-label { display: flex; align-items: center; gap: 5px; }
 #window-size { font: inherit; color: #aaa; width: 40px; padding: 3px 0; border: 0; border-bottom: 1px solid #444; border-radius: 0; background: #000; appearance: textfield; -moz-appearance: textfield; text-align: right; }
 #window-size::-webkit-inner-spin-button, #window-size::-webkit-outer-spin-button { appearance: none; margin: 0; }
-#history-position { display: block; width: 100%; margin: 5px 0 0; height: 24px; background: transparent; accent-color: #888; cursor: ew-resize; }
-#history-position:disabled { opacity: .25; }
 .table-area { grid-area: table; min-width: 0; }
 .table-scroll { max-height: 298px; overflow: auto; overscroll-behavior: contain; outline: 0; scrollbar-color: #444 #000; scrollbar-width: thin; }
 table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: right; font-size: 17px; line-height: 1.25; font-variant-numeric: tabular-nums; }
@@ -81,13 +79,13 @@ body.is-running .light { width: clamp(38px, 12vw, 64px); }
 @media(max-width:360px) { .app { padding: 48px 14px 24px; } .lights { gap: 13px; } .light { width: 42px; } table { font-size: 13px; } th, td { padding: 10px 6px; } #start-hint { font-size: 15px; } }
 @media(prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; } }
 
-.overview { position: relative; height: 32px; border: 1px solid #3a3a3a; margin: 14px 0 0 61px; }
+.overview { position: relative; height: 32px; border: 1px solid #3a3a3a; margin: 14px 0 0 61px; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; }
 #overview-graph svg { display: block; width: 100%; height: 30px; }
-#history-position { appearance: none; -webkit-appearance: none; position: absolute; inset: 0; height: 30px; margin: 0; border: 0; accent-color: #ccc; background: transparent; }
-#history-position::-webkit-slider-runnable-track { height: 30px; background: transparent; }
-#history-position::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 3px; height: 30px; background: #bbb; border: 0; border-radius: 0; }
-#history-position::-moz-range-track { background: transparent; }
-#history-position::-moz-range-thumb { width: 3px; height: 28px; background: #bbb; border: 0; border-radius: 0; }
+#history-position { position: absolute; top: 0; height: 30px; border: 1px solid #b0b0b0; background: #ffffff0b; touch-action: pan-y; outline: 0; cursor: grab; }
+.overview-handle { position: absolute; top: -7px; width: 24px; height: 44px; transform: translateX(-50%); touch-action: pan-y; outline: 0; cursor: ew-resize; }
+.overview-handle::after { content: ''; position: absolute; left: calc(50% - 1px); top: 7px; bottom: 7px; width: 2px; background: #bbb; }
+#history-position:focus-visible, .overview-handle:focus-visible { outline: 1px solid #888; outline-offset: 2px; }
+#history-position[aria-disabled=true] { cursor: default; }
 @media(min-width:761px) { .stage { padding: 6px 0 25px; } .chart-area { padding-top: 4px; } }
 
 .stage.long-score #result-value { font-size: clamp(36px, 8vw, 48px); }
@@ -109,7 +107,7 @@ body.is-running .light { width: clamp(38px, 12vw, 64px); }
     <section class="chart-area" data-control aria-label="Reaction graph and history browsing">
       <div class="history-navigation"><span id="window-label">0 rounds</span><label class="window-size-label">view <input id="window-size" type="number" inputmode="numeric" min="1" value="50" aria-label="Number of visible attempts"></label></div>
       <div id="chart" tabindex="0" role="group" aria-label="Reaction history. Drag to browse, arrow keys to move, plus or minus to zoom."></div>
-      <div class="overview"><div id="overview-graph" aria-hidden="true"></div><input id="history-position" type="range" min="0" max="0" value="0" aria-label="Browse earlier or later history"></div>
+      <div class="overview" role="group" aria-label="History overview"><div id="overview-graph" aria-hidden="true"></div><div id="history-position" role="slider" tabindex="0" aria-label="Browse earlier or later history" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><div id="history-start" class="overview-handle" role="slider" tabindex="0" aria-label="First visible attempt" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><div id="history-end" class="overview-handle" role="slider" tabindex="0" aria-label="Last visible attempt" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div></div>
     </section>
     <section class="table-area" data-control aria-label="Attempt history"><div class="history-tabs" role="tablist" aria-label="History view"><button type="button" id="recent-tab" role="tab" aria-selected="true" aria-controls="history-panel">Recent</button><button type="button" id="best-tab" role="tab" aria-selected="false" aria-controls="history-panel" tabindex="-1">Best</button></div>
       <div class="table-scroll" id="history-panel" role="tabpanel" tabindex="0"><table><colgroup><col class="round-column"><col class="score-column"><col class="average-column"><col class="average-column"><col class="input-column"></colgroup><thead><tr><th scope="col">#</th><th scope="col">ms</th><th scope="col">ao5</th><th scope="col">ao12</th><th scope="col">Input</th></tr></thead><tbody id="history-rows"></tbody></table></div>
@@ -422,7 +420,7 @@ function mergeStoredBests(previous, record) {
   return best;
 }
 function emptyHistory() {
-  return { records: [], bestRecords: [], lifetimeBests: emptyBests(), totalAttempts: 0, rollingScores: [], latest: null };
+  return { records: [], bestRecords: [], lifetimeBests: emptyBests(), totalAttempts: 0, rollingScores: [], latest: null, pendingRecent: [] };
 }
 function appendHistory(state, input) {
   if (!valid(input)) throw new TypeError('Invalid reaction record');
@@ -436,6 +434,7 @@ function appendHistory(state, input) {
   return {
     records: [...state.records, record].slice(-RECENT_LIMIT), bestRecords, lifetimeBests,
     totalAttempts: record.round, rollingScores: [...state.rollingScores, record.scoreMs].slice(-11), latest: compact(record),
+    pendingRecent: [...(state.pendingRecent || []), compact(record)].slice(-RECENT_LIMIT),
   };
 }
 function restoreHistory(recentSaved, bestSaved = null) {
@@ -444,6 +443,7 @@ function restoreHistory(recentSaved, bestSaved = null) {
     // Stream legacy data and preserve its best ledger before pruning. A
     // separately saved ledger also survives an absent/corrupt recent buffer.
     for (const record of Array.isArray(recentSaved?.records) ? recentSaved.records : []) if (valid(record)) state = appendHistory(state, record);
+    state.pendingRecent = []; // legacy records are already present in recentSaved
     const migrated = bestSnapshot(state);
     if (bestSaved?.version === 1) {
       const supplied = bestSaved, newer = supplied.totalAttempts >= migrated.totalAttempts ? supplied : migrated;
@@ -457,25 +457,43 @@ function restoreHistory(recentSaved, bestSaved = null) {
     recentSaved = recentSnapshot(state);
   }
   const normalize = record => ({ ...record, ao5: average(record.ao5), ao12: average(record.ao12) });
-  const records = (Array.isArray(recentSaved.records) ? recentSaved.records : []).filter(valid).filter(record => Number.isSafeInteger(record.round) && record.round > 0).slice(-RECENT_LIMIT).map(normalize);
+  const retained = values => (Array.isArray(values) ? values : []).filter(valid).filter(record => Number.isSafeInteger(record.round) && record.round > 0).map(normalize);
+  const savedRecords = retained(recentSaved.records).slice(-RECENT_LIMIT);
   const ledger = bestSaved?.version === 1 ? bestSaved : {};
-  const retainedBest = (Array.isArray(ledger.bestRecords) ? ledger.bestRecords : []).filter(valid).filter(record => Number.isSafeInteger(record.round) && record.round > 0).map(normalize);
+  const retainedBest = retained(ledger.bestRecords);
+  const pending = retained(ledger.pendingRecent).slice(-RECENT_LIMIT);
+  const ledgerLatest = retained([ledger.latest]).find(record => record.round === ledger.totalAttempts) || null;
+  let totalAttempts = Math.max(0, Number.isSafeInteger(recentSaved.totalAttempts) ? recentSaved.totalAttempts : 0, Number.isSafeInteger(ledger.totalAttempts) ? ledger.totalAttempts : 0);
+  for (const record of [...savedRecords, ...retainedBest, ...pending]) totalAttempts = Math.max(totalAttempts, record.round);
+  // Recover only real retained records, keeping their original round/average
+  // metadata. Prefer the full recent copy over a compact recovery duplicate.
+  const recovered = new Map();
+  for (const record of [...retainedBest, ...pending, ...(ledgerLatest ? [ledgerLatest] : []), ...savedRecords]) {
+    if (record.round > totalAttempts - RECENT_LIMIT) recovered.set(record.round, record);
+  }
+  const records = [...recovered.values()].sort((a, b) => a.round - b.round).slice(-RECENT_LIMIT);
+  const savedRounds = new Set(savedRecords.map(record => record.round));
+  const pendingRecent = records.filter(record => !savedRounds.has(record.round)).map(compact);
   const bestRecords = topRecords([...retainedBest, ...records]);
   let lifetimeBests = emptyBests();
   for (const key of ['single', 'ao5', 'ao12']) lifetimeBests[key] = average(ledger.lifetimeBests?.[key]);
   for (const record of [...records, ...bestRecords]) lifetimeBests = mergeStoredBests(lifetimeBests, record);
-  let totalAttempts = Math.max(0, Number.isSafeInteger(recentSaved.totalAttempts) ? recentSaved.totalAttempts : 0, Number.isSafeInteger(ledger.totalAttempts) ? ledger.totalAttempts : 0);
-  for (const record of [...records, ...bestRecords]) totalAttempts = Math.max(totalAttempts, record.round);
-  const latest = valid(ledger.latest) && ledger.latest.round === totalAttempts ? normalize(ledger.latest) : records[records.length - 1] || null;
+  const latest = ledgerLatest?.round === totalAttempts ? ledgerLatest : records[records.length - 1] || null;
   const tail = (Array.isArray(ledger.rollingScores) ? ledger.rollingScores : []).filter(score => Number.isFinite(score) && score >= 0).slice(-11);
-  const rollingScores = ledger.totalAttempts === totalAttempts && tail.length ? tail : records.slice(-11).map(record => record.scoreMs);
-  return { records, bestRecords, lifetimeBests, totalAttempts, rollingScores, latest };
+  const contiguousTail = [];
+  for (let i = records.length - 1, round = totalAttempts; i >= 0 && contiguousTail.length < 11 && records[i].round === round; i--, round--) contiguousTail.unshift(records[i].scoreMs);
+  const rollingScores = ledger.totalAttempts === totalAttempts && tail.length ? tail : contiguousTail;
+  return { records, bestRecords, lifetimeBests, totalAttempts, rollingScores, latest, pendingRecent };
+}
+function missingRecentCount(state) {
+  const retained = state.records.filter(record => record.round > state.totalAttempts - RECENT_LIMIT).length;
+  return Math.max(0, Math.min(state.totalAttempts, RECENT_LIMIT) - retained);
 }
 function recentSnapshot(state, tableTab = 'recent') {
   return { version: 3, records: state.records, totalAttempts: state.totalAttempts, tableTab };
 }
 function bestSnapshot(state) {
-  return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest };
+  return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest, pendingRecent: state.pendingRecent || [] };
 }
 
 // One trusted stream per device. Mouse chords produce pointermove events.
@@ -629,23 +647,26 @@ const engine = new ReactionEngine({
   onChange: renderState,
   onResult: record => {
     lastRecord = { ...record, id: uuid(), completedAt: new Date().toISOString(), documentHasFocus: document.hasFocus() };
-    const oldLength = records.length;
     history = appendHistory(history, lastRecord);
     records = history.records; best = history.lifetimeBests; lastRecord = history.latest;
-    if (followLatest) viewport = historyWindow(records.length, viewport.count);
-    else viewport = historyWindow(records.length, viewport.count, Math.max(0, viewport.end - (oldLength + 1 - records.length)));
+    viewport = historyWindow(records.length, viewport.count); followLatest = true;
     save(); renderHistory();
+    $('.table-scroll').scrollTop = 0;
   },
 });
 function save() {
   let bestSaved = false, recentSaved = false;
-  // Save the small independent ledger first, so pruning/quota pressure on the
-  // recent buffer cannot silently erase lifetime bests or original averages.
+  // Save pending results with the independent ledger before the recent buffer.
+  // Clear the in-memory retry queue only after that buffer is safely written.
   try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(history))); bestSaved = true; } catch {}
   try { localStorage.setItem(storageKey, JSON.stringify(recentSnapshot(history, tableTab))); recentSaved = true; } catch {}
+  if (recentSaved) history = { ...history, pendingRecent: [] };
   storageAvailable = bestSaved && recentSaved;
-  $('#storage-note').hidden = storageAvailable;
-  $('#storage-note').textContent = bestSaved ? 'Recent history could not be saved. Best records are saved separately.' : recentSaved ? 'Best records could not be saved. Recent history is saved.' : 'Browser storage is unavailable or full. New results remain in memory for this visit.';
+  const missing = missingRecentCount(history);
+  $('#storage-note').hidden = storageAvailable && !missing;
+  const saveNote = storageAvailable ? '' : bestSaved ? 'Recent history could not be saved. Best records are saved separately, together with new results for recovery.' : recentSaved ? 'Best records could not be saved. Recent history is saved.' : 'Browser storage is unavailable or full. New results remain in memory for this visit.';
+  const restoreNote = missing ? `${missing} older recent ${missing === 1 ? 'attempt could' : 'attempts could'} not be restored. Available results and best records are retained.` : '';
+  $('#storage-note').textContent = [saveNote, restoreNote].filter(Boolean).join(' ');
 }
 function monitor(frameTime) {
   engine.observeFrame(frameTime);
@@ -691,9 +712,11 @@ function renderChart(rows) {
     svg.append(node('line', { x1: left, x2: right, y1: yy, y2: yy, stroke: '#343434', 'stroke-width': 1 }));
     svg.append(node('text', { x: left - 10, y: yy + 5, 'text-anchor': 'end', fill: '#ddd', 'font-size': 16 }, `${Math.round(value)}${i === 6 ? ' ms' : ''}`));
   }
-  const tickStep = Math.max(1, Math.ceil(rows.length / 7));
+  const labelWidth = Math.max(38, ...rows.map(row => String(row.round).length * 9 + 12));
+  const tickCount = Math.min(rows.length, 7, Math.max(2, Math.floor((right - left) / labelWidth) + 1));
+  const tickIndices = new Set(Array.from({ length: tickCount }, (_, i) => Math.round(i * (rows.length - 1) / Math.max(1, tickCount - 1))));
   rows.forEach((row, i) => {
-    if (i % tickStep && i !== rows.length - 1) return;
+    if (!tickIndices.has(i)) return;
     svg.append(node('line', { x1: x(i), x2: x(i), y1: top, y2: bottom + 10, stroke: '#343434', 'stroke-width': 1 }));
     svg.append(node('text', { x: x(i), y: bottom + 31, 'text-anchor': 'middle', fill: '#ddd', 'font-size': 16 }, row.round));
   });
@@ -716,8 +739,21 @@ function renderOverview() {
     points.push(`${x},${height - low / maximum * 26 - 2}`, `${x},${height - high / maximum * 26 - 2}`);
   }
   svg.append(node('polyline', { points: points.join(' '), fill: 'none', stroke: '#777', 'stroke-width': .8 }));
-  if (records.length) svg.append(node('rect', { x: viewport.start / records.length * width, y: 0, width: (viewport.end - viewport.start) / records.length * width, height, fill: '#ffffff0b', stroke: '#b0b0b0', 'stroke-width': 1.2 }));
   $('#overview-graph').replaceChildren(svg);
+  const length = records.length, roundAt = index => records[index]?.round || 0;
+  const start = $('#history-start'), end = $('#history-end'), position = $('#history-position');
+  position.style.left = start.style.left = `${length ? viewport.start / length * 100 : 0}%`;
+  position.style.width = `${length ? (viewport.end - viewport.start) / length * 100 : 0}%`;
+  end.style.left = `${length ? viewport.end / length * 100 : 0}%`;
+  for (const [control, value, min, max, disabled] of [
+    [start, roundAt(viewport.start), roundAt(0), roundAt(viewport.end - 1), !length],
+    [end, roundAt(viewport.end - 1), roundAt(viewport.start), roundAt(length - 1), !length],
+    [position, roundAt(viewport.end - 1), roundAt(Math.min(viewport.count, length) - 1), roundAt(length - 1), viewport.end - viewport.start >= length],
+  ]) {
+    control.hidden = !length; control.setAttribute('aria-valuemin', min); control.setAttribute('aria-valuemax', max); control.setAttribute('aria-valuenow', value);
+    control.setAttribute('aria-disabled', String(disabled)); control.tabIndex = disabled ? -1 : 0;
+  }
+  position.setAttribute('aria-valuetext', `Rounds ${roundAt(viewport.start)} to ${roundAt(viewport.end - 1)}`);
 }
 function renderHistory() {
   $('#best-single').textContent = best.single === null ? '—' : String(Math.round(best.single));
@@ -748,14 +784,12 @@ function renderHistory() {
   $('#window-label').textContent = chartRows.length ? `${followLatest ? 'Last ' + chartRows.length + ' attempts' : chartRows[0].round + '–' + chartRows[chartRows.length - 1].round} · ${history.totalAttempts} total` : 'No recent attempts';
   $('#window-size').value = viewport.count;
   $('#window-size').max = Math.min(RECENT_LIMIT, Math.max(records.length, 50));
-  $('#history-position').max = records.length;
-  $('#history-position').min = 0;
-  $('#history-position').value = viewport.end;
-  $('#history-position').disabled = records.length <= viewport.count;
   renderOverview();
 }
 function browse(end, count = viewport.count) {
-  viewport = historyWindow(records.length, count, end); followLatest = viewport.end === records.length; renderHistory();
+  const next = historyWindow(records.length, count, end);
+  viewport = historyWindow(records.length, next.count, Math.max(Math.min(next.count, records.length), next.end));
+  followLatest = viewport.end === records.length; renderHistory();
 }
 for (const [id, value] of [['recent-tab', 'recent'], ['best-tab', 'best']]) {
   const tab = $(`#${id}`);
@@ -766,7 +800,19 @@ for (const [id, value] of [['recent-tab', 'recent'], ['best-tab', 'best']]) {
   });
 }
 $('#window-size').addEventListener('change', event => browse(viewport.end, event.target.value));
-$('#history-position').addEventListener('input', event => browse(Math.max(Math.min(viewport.count, records.length), Number(event.target.value))));
+for (const id of ['history-position', 'history-start', 'history-end']) $(`#${id}`).addEventListener('keydown', event => {
+  if (!records.length || event.ctrlKey || event.metaKey || event.altKey) return;
+  const step = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10 }[event.key];
+  if (step === undefined && !['Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const min = id === 'history-start' ? 0 : id === 'history-end' ? viewport.start + 1 : Math.min(viewport.count, records.length);
+  const max = id === 'history-start' ? viewport.end - 1 : records.length;
+  const current = id === 'history-start' ? viewport.start : viewport.end;
+  const next = Math.max(min, Math.min(max, event.key === 'Home' ? min : event.key === 'End' ? max : current + step));
+  if (id === 'history-start') browse(viewport.end, viewport.end - next);
+  else if (id === 'history-end') browse(next, next - viewport.start);
+  else browse(next);
+});
 $('#chart').addEventListener('keydown', event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   const actions = { ArrowLeft: () => browse(Math.max(viewport.count, viewport.end - 1)), ArrowRight: () => browse(viewport.end + 1), Home: () => browse(Math.min(viewport.count, records.length)), End: () => browse(records.length), '+': () => browse(viewport.end, viewport.count / 1.4), '=': () => browse(viewport.end, viewport.count / 1.4), '-': () => browse(viewport.end, viewport.count * 1.4) };
@@ -776,18 +822,48 @@ $('#chart').addEventListener('wheel', event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   event.preventDefault(); browse(Math.max(Math.min(viewport.count, records.length), viewport.end + Math.sign(event.deltaY || event.deltaX) * Math.max(1, Math.round(viewport.count / 10))));
 }, { passive: false });
-let drag = null;
-$('#chart').addEventListener('pointerdown', event => {
-  if (event.button !== 0) return;
-  drag = { id: event.pointerId, x: event.clientX, end: viewport.end };
-  $('#chart').setPointerCapture(event.pointerId);
-});
-$('#chart').addEventListener('pointermove', event => {
-  if (!drag || event.pointerId !== drag.id) return;
-  const offset = Math.round((drag.x - event.clientX) / $('#chart').clientWidth * viewport.count);
-  browse(Math.max(Math.min(viewport.count, records.length), drag.end + offset));
-});
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) $('#chart').addEventListener(type, () => { drag = null; });
+function bindHistoryDrag(target, chart = false) {
+  let drag = null;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  target.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !event.isPrimary || !records.length) return;
+    let mode = chart ? 'chart' : 'pan';
+    const rect = target.getBoundingClientRect();
+    if (!chart && event.target.closest('.overview-handle')) {
+      const x = event.clientX - rect.left;
+      mode = Math.abs(x - viewport.start / records.length * rect.width) < Math.abs(x - viewport.end / records.length * rect.width) ? 'start' : 'end';
+    }
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, axis: null, mode, rect, view: { ...viewport }, length: records.length, track: event.target === target || event.target.closest('#overview-graph') };
+    target.setPointerCapture(event.pointerId);
+  });
+  target.addEventListener('pointermove', event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (!drag.axis) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      drag.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (drag.axis !== 'x') return;
+    event.preventDefault();
+    const original = drag.view, offset = Math.round(dx / drag.rect.width * (chart ? original.count : drag.length));
+    if (drag.mode === 'start') {
+      const start = clamp(original.start + offset, 0, original.end - 1); browse(original.end, original.end - start);
+    } else if (drag.mode === 'end') {
+      const end = clamp(original.end + offset, original.start + 1, drag.length); browse(end, end - original.start);
+    } else browse(clamp(original.end + (chart ? -offset : offset), Math.min(original.count, drag.length), drag.length), original.count);
+  }, { passive: false });
+  target.addEventListener('pointerup', event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    if (!chart && !drag.axis && drag.track) {
+      const count = Math.min(drag.view.count, drag.length), middle = (event.clientX - drag.rect.left) / drag.rect.width * drag.length;
+      browse(clamp(Math.round(middle + count / 2), count, drag.length));
+    }
+    drag = null;
+  });
+  for (const type of ['pointercancel', 'lostpointercapture']) target.addEventListener(type, event => { if (drag?.id === event.pointerId) drag = null; });
+}
+bindHistoryDrag($('#chart'), true);
+bindHistoryDrag($('.overview'));
 bindInputs({ engine, surface: stage, eventData: (event, handledAt, device, inputId) => {
   const eventTimeMs = normalizeEventTime(event.timeStamp, handledAt, performance.timeOrigin);
   return { device, inputId, eventTimeMs, rawEventTimestamp: event.timeStamp, handlerAtMs: handledAt, handlerDelayMs: eventTimeMs === null ? null : handledAt - eventTimeMs, eventType: event.type, pointerType: event.pointerType || null, key: event.key || null, code: event.code || null, button: event.button ?? null, buttons: event.buttons ?? null, timeOriginMs: performance.timeOrigin };
