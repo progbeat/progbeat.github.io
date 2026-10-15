@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="Five lights. Press or release at blackout. Private browser-local reaction history.">
+  <title>Lights Out</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='black'/%3E%3Ccircle cx='16' cy='16' r='9' fill='%23ff0026'/%3E%3C/svg%3E">
+  <style>
+:root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; background: #000; color: #f4f4f4; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: #000; }
+body { -webkit-font-smoothing: antialiased; }
+.app { width: min(1180px, 100%); margin: 0 auto; padding: 76px 48px 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'game table' 'chart chart' 'storage storage'; row-gap: 35px; column-gap: 54px; align-items: start; }
+.stage { grid-area: game; text-align: center; outline: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; padding: 0 0 50px; }
+.lights { display: flex; justify-content: center; gap: 22px; margin: 0 auto 36px; width: max-content; }
+.light { display: block; width: clamp(38px, 5vw, 58px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(ellipse at 40% 26%, #3b3b3b, #303030 70%); }
+.light.on { background: radial-gradient(ellipse at 40% 26%, #ff1834, #ff0026 72%); box-shadow: 0 0 22px #ff002659; }
+#result-value { font-size: clamp(52px, 5vw, 72px); font-weight: 400; line-height: 1.13; letter-spacing: -2.5px; font-variant-numeric: tabular-nums; }
+#result-value span { font-size: inherit; letter-spacing: -2px; }
+#start-hint { margin: 8px 0 0; color: #b6b6b6; font-size: 20px; line-height: 1.4; }
+.stage.false-start #result-value { color: #ff0026; }
+.chart-area { grid-area: chart; min-width: 0; touch-action: pan-y; }
+#chart { width: 100%; outline: 0; user-select: none; -webkit-user-select: none; touch-action: pan-y; cursor: grab; }
+#chart:active { cursor: grabbing; }
+#chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+#chart:focus-visible, .table-scroll:focus-visible { outline: 1px solid #777; outline-offset: 5px; }
+.history-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 11px; color: #777; margin: 0 0 10px; }
+.window-size-label { display: flex; align-items: center; gap: 5px; }
+#window-size { font: inherit; color: #aaa; width: 40px; padding: 3px 0; border: 0; border-bottom: 1px solid #444; border-radius: 0; background: #000; appearance: textfield; -moz-appearance: textfield; text-align: right; }
+#window-size::-webkit-inner-spin-button, #window-size::-webkit-outer-spin-button { appearance: none; margin: 0; }
+#history-position { display: block; width: 100%; margin: 5px 0 0; height: 24px; background: transparent; accent-color: #888; cursor: ew-resize; }
+#history-position:disabled { opacity: .25; }
+.table-area { grid-area: table; min-width: 0; }
+.table-scroll { max-height: 298px; overflow: auto; overscroll-behavior: contain; outline: 0; scrollbar-color: #444 #000; scrollbar-width: thin; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: 17px; line-height: 1.25; font-variant-numeric: tabular-nums; }
+th, td { padding: 10px 10px; border-bottom: 1px solid #414141; font-weight: 400; white-space: nowrap; }
+th { position: sticky; top: 0; background: #000; border-bottom-color: #888; font-weight: 500; }
+th:first-child, td:first-child { padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+tr.false-start { color: #ff0026; }
+tr.false-start td { font-weight: 600; }
+#storage-note { grid-area: storage; color: #b6b6b6; font-size: 12px; margin-top: 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+[hidden] { display: none !important; }
+body.is-running { overflow: hidden; cursor: none; background: #000; }
+body.is-running * { cursor: none !important; }
+body.is-running .app { visibility: hidden; position: fixed; inset: 0; width: 100%; max-width: none; padding: 0; overflow: hidden; }
+body.is-running .stage { visibility: visible; position: fixed; inset: 0; width: 100%; height: 100dvh; height: 100vh; padding: 16px; display: flex; justify-content: center; align-items: center; background: #000; }
+body.is-running .stage > :not(.lights) { display: none; }
+body.is-running .lights { margin: 0; gap: clamp(12px, 4vw, 22px); }
+body.is-running .light { width: clamp(38px, 12vw, 64px); }
+@supports(height:100dvh) { body.is-running .stage { height: 100dvh; } }
+@media(max-width:760px) {
+  .app { padding: 62px 20px 30px; max-width: 540px; grid-template-columns: 1fr; grid-template-areas: 'game' 'chart' 'table' 'storage'; gap: 0; }
+  .stage { padding-bottom: 35px; }
+  .lights { gap: clamp(13px, 4vw, 20px); margin-bottom: 32px; }
+  .light { width: clamp(38px, 12vw, 58px); }
+  #result-value { font-size: clamp(54px, 15vw, 68px); letter-spacing: -2.8px; }
+  #start-hint { font-size: 17px; margin-top: 9px; }
+  .chart-area { margin-bottom: 27px; }
+  .table-scroll { max-height: 420px; }
+  table { font-size: 15px; }
+  th, td { padding: 10px 8px; }
+  .history-navigation { font-size: 10px; }
+}
+@media(max-width:360px) { .app { padding: 48px 14px 24px; } .lights { gap: 13px; } .light { width: 42px; } table { font-size: 13px; } th, td { padding: 10px 6px; } #start-hint { font-size: 15px; } }
+@media(prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; } }
+
+.overview { position: relative; height: 32px; border: 1px solid #3a3a3a; margin: 14px 0 0 61px; }
+#overview-graph svg { display: block; width: 100%; height: 30px; }
+#history-position { appearance: none; -webkit-appearance: none; position: absolute; inset: 0; height: 30px; margin: 0; border: 0; accent-color: #ccc; background: transparent; }
+#history-position::-webkit-slider-runnable-track { height: 30px; background: transparent; }
+#history-position::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 3px; height: 30px; background: #bbb; border: 0; border-radius: 0; }
+#history-position::-moz-range-track { background: transparent; }
+#history-position::-moz-range-thumb { width: 3px; height: 28px; background: #bbb; border: 0; border-radius: 0; }
+@media(min-width:761px) { .stage { padding: 6px 0 25px; } .chart-area { padding-top: 4px; } }
+
+.stage.long-score #result-value { font-size: clamp(36px, 8vw, 48px); }
+@media(min-width:761px) { .lights { gap: clamp(10px, 2vw, 22px); } }
+
+</style>
+</head>
+<body>
+  <main class="app" data-desktop-layout="b">
+    <section class="stage" tabindex="0" aria-label="Reaction test. Press a key, mouse button, or touch to start.">
+      <div class="lights" role="img" aria-label="All five lights off"><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i></div>
+      <div class="result-area"><div id="result-value">—<span> ms</span></div><p id="start-hint">Open in a browser to play — this preview may not run JavaScript.</p></div>
+    </section>
+    <section class="chart-area" data-control aria-label="Reaction graph and history browsing">
+      <div class="history-navigation"><span id="window-label">0 rounds</span><label class="window-size-label">view <input id="window-size" type="number" inputmode="numeric" min="1" value="50" aria-label="Number of visible attempts"></label></div>
+      <div id="chart" tabindex="0" role="group" aria-label="Reaction history. Drag to browse, arrow keys to move, plus or minus to zoom."></div>
+      <div class="overview"><div id="overview-graph" aria-hidden="true"></div><input id="history-position" type="range" min="0" max="0" value="0" aria-label="Browse earlier or later history"></div>
+    </section>
+    <section class="table-area" data-control aria-label="Attempt history">
+      <div class="table-scroll" tabindex="0"><table><thead><tr><th scope="col">#</th><th scope="col">ms</th><th scope="col">ao5</th><th scope="col">ao12</th><th scope="col">Input</th></tr></thead><tbody id="history-rows"></tbody></table></div>
+    </section>
+    <p id="storage-note" role="status" hidden></p>
+    <p id="announcement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+  </main>
+  <script>
+const MEAN_DELAY_MS = 500;
+const LIGHT_INTERVAL_MS = 600;
+
+// 53 random bits, uniformly mapped to [0, 1). Never returns 1.
+function uniform53(cryptoSource = globalThis.crypto) {
+  const words = new Uint32Array(2);
+  cryptoSource.getRandomValues(words);
+  return ((words[0] >>> 5) * 67108864 + (words[1] >>> 6)) / 9007199254740992;
+}
+
+function exponentialDelay(u) {
+  if (!Number.isFinite(u) || u < 0 || u >= 1) throw new RangeError('U must be in [0, 1).');
+  return -MEAN_DELAY_MS * Math.log(1 - u);
+}
+
+// Modern events are relative to performance.timeOrigin; older epoch stamps
+// are converted to that same origin. No empirical latency offset is applied.
+function normalizeEventTime(timestamp, handledAt, timeOrigin) {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+  const epochRelative = timestamp - timeOrigin;
+  return Math.abs(epochRelative - handledAt) < Math.abs(timestamp - handledAt)
+    ? epochRelative : timestamp;
+}
+
+function summarize(records) {
+  const successful = records.filter(record => !record.falseStart).map(record => record.reactionMs).sort((a, b) => a - b);
+  const middle = Math.floor(successful.length / 2);
+  return {
+    count: records.length,
+    meanScore: records.length ? records.reduce((sum, record) => sum + record.scoreMs, 0) / records.length : null,
+    falseStarts: records.filter(record => record.falseStart).length,
+    medianReaction: successful.length ? (successful.length % 2 ? successful[middle] : (successful[middle - 1] + successful[middle]) / 2) : null,
+    bestReaction: successful.length ? successful[0] : null,
+  };
+}
+
+class ReactionEngine {
+  constructor({ now, setTimer, clearTimer, requestFrame, cancelFrame, random = uniform53, invalidReason = () => null, onChange, onSignal, onResult }) {
+    Object.assign(this, { now, setTimer, clearTimer, requestFrame, cancelFrame, random, invalidReason, onChange, onSignal, onResult });
+    this.state = 'idle';
+    this.lights = 0;
+    this.generation = 0;
+    this.timer = this.frame = null;
+    this.held = new Map();
+    this.releaseIds = new Set();
+    this.roundInputs = new Set();
+    this.attempt = null;
+    this.previousFrameMs = null;
+    this.frameIntervals = [];
+    this.maxFrameGapMs = 0;
+    this.trialFrameIntervals = [];
+    this.lastTrialFrame = null;
+  }
+
+  get active() { return ['countdown', 'waiting', 'signal'].includes(this.state); }
+  get scoring() { return ['waiting', 'signal'].includes(this.state); }
+
+  observeFrame(frameTime) {
+    if (!this.active) return;
+    if (this.lastTrialFrame !== null) this.trialFrameIntervals.push(frameTime - this.lastTrialFrame);
+    this.lastTrialFrame = frameTime;
+  }
+
+  guardTiming() {
+    const reason = this.invalidReason();
+    if (!reason) return true;
+    this.cancel(reason);
+    return false;
+  }
+
+  stopScheduled() {
+    this.generation += 1;
+    if (this.timer !== null) this.clearTimer(this.timer);
+    if (this.frame !== null) this.cancelFrame(this.frame);
+    this.timer = this.frame = null;
+  }
+
+  // Every physical edge is tracked. Down starts the red preparation sequence.
+  // Each round owns its downs. Old held inputs can never leak releases into it.
+  input(edge, event) {
+    const wasHeld = this.held.has(event.inputId);
+    if (edge === 'down') {
+      if (wasHeld) return;
+      this.held.set(event.inputId, event.device);
+      if (!this.active) {
+        this.stopScheduled();
+        this.beginCountdown(event);
+        return;
+      }
+    } else {
+      if (!wasHeld) return;
+      this.held.delete(event.inputId);
+    }
+    if (!this.active) { this.onChange(this); return; }
+    if (event.eventTimeMs !== null && event.eventTimeMs < this.attempt.startedAtMs) return;
+    if (edge === 'down') this.roundInputs.add(event.inputId);
+    if (edge === 'up' && !this.roundInputs.has(event.inputId)) return;
+    if (!this.guardTiming()) return;
+    if (this.state === 'countdown') {
+      this.onChange(this);
+      return;
+    }
+    // A queued preparation edge must not become a false start merely because
+    // its handler runs after the fifth light. Use the event's actual timestamp.
+    if (this.scoring && event.eventTimeMs !== null && event.eventTimeMs < this.attempt.allLightsOnMs) {
+      if (edge === 'up') this.releaseIds.delete(event.inputId);
+      else this.releaseIds.add(event.inputId);
+      this.onChange(this);
+      return;
+    }
+    if (!this.scoring || (edge === 'up' && !this.releaseIds.has(event.inputId))) return;
+    if (event.eventTimeMs === null || !Number.isFinite(event.eventTimeMs)) {
+      this.cancel('Event timestamp unavailable');
+      return;
+    }
+    const onset = this.attempt.softwareOnsetMs;
+    const falseStart = onset === null || event.eventTimeMs < onset;
+    const reactionMs = falseStart ? null : event.eventTimeMs - onset;
+    const intervals = this.frameIntervals.slice().sort((a, b) => a - b);
+    const medianFrameIntervalMs = intervals.length ? intervals[Math.floor(intervals.length / 2)] : null;
+    const trialIntervals = this.trialFrameIntervals.slice().sort((a, b) => a - b);
+    const trialMedian = trialIntervals.length ? trialIntervals[Math.floor(trialIntervals.length / 2)] : null;
+    const trialMax = trialIntervals.length ? trialIntervals[trialIntervals.length - 1] : null;
+    const record = {
+      ...this.attempt, ...event,
+      trialMedianFrameIntervalMs: trialMedian, maxTrialFrameGapMs: trialMax,
+      trialFrameIntervalsMs: this.trialFrameIntervals.slice(),
+      frameQuality: trialMedian === null ? 'Not recorded' : trialMax > trialMedian * 1.8 ? 'Uneven cadence' : 'Stable cadence',
+      physicalCalibration: false,
+      modeKey: `${event.device}:${edge}`,
+      responseEdge: edge,
+      falseStart, reactionMs,
+      scoreMs: falseStart ? 500 : reactionMs,
+      recentFrameIntervalsMs: this.frameIntervals.slice(),
+      medianFrameIntervalMs,
+      maxFrameGapMs: this.maxFrameGapMs,
+      suspectedMissedFrames: medianFrameIntervalMs ? this.frameIntervals.reduce((sum, gap) => sum + Math.max(0, Math.round(gap / medianFrameIntervalMs) - 1), 0) : null,
+    };
+    this.stopScheduled();
+    this.state = 'result';
+    this.lights = 0;
+    this.onResult(record);
+    this.onChange(this);
+  }
+
+  beginCountdown(event) {
+    this.trialFrameIntervals = [];
+    this.lastTrialFrame = null;
+    this.releaseIds.clear();
+    this.roundInputs = new Set([event.inputId]);
+    this.attempt = {
+      startedAtMs: Number.isFinite(event.eventTimeMs) ? event.eventTimeMs : this.now(), startedHandlerAtMs: this.now(), preparedInput: null,
+      allLightsOnMs: null, sampledDelayMs: null,
+      scheduledOffMs: null, softwareOnsetMs: null,
+    };
+    this.state = 'countdown';
+    this.lights = 0;
+    this.frameIntervals = [];
+    this.maxFrameGapMs = 0;
+    this.onChange(this);
+    if (!this.guardTiming()) return;
+    this.nextLight(this.generation);
+  }
+
+  nextLight(generation) {
+    this.frame = this.requestFrame(frameTime => {
+      this.frame = null;
+      if (generation !== this.generation || this.state !== 'countdown') return;
+      if (!this.guardTiming()) return;
+      this.lights += 1;
+      if (this.lights < 5) {
+        this.onChange(this);
+        this.timer = this.setTimer(() => this.nextLight(generation), LIGHT_INTERVAL_MS);
+      } else {
+        this.releaseIds = new Set([...this.held.keys()].filter(id => this.roundInputs.has(id)));
+        this.attempt.preparedInput = this.releaseIds.size ? this.held.get([...this.releaseIds][0]) : null;
+        this.state = 'waiting';
+        this.onChange(this);
+        this.attempt.allLightsOnMs = this.now();
+        this.attempt.sampledDelayMs = exponentialDelay(this.random());
+        this.attempt.scheduledOffMs = this.attempt.allLightsOnMs + this.attempt.sampledDelayMs;
+        this.previousFrameMs = frameTime;
+        this.frameIntervals = [];
+        this.maxFrameGapMs = 0;
+        this.pollSignalFrame(generation);
+      }
+    });
+  }
+
+  pollSignalFrame(generation) {
+    // Tiny frame loop while all five lights are on. It also measures software
+    // frame gaps; these diagnostics are never subtracted from the score.
+    this.frame = this.requestFrame(frameTime => {
+      this.frame = null;
+      if (generation !== this.generation || this.state !== 'waiting') return;
+      if (!this.guardTiming()) return;
+      if (this.previousFrameMs !== null) {
+        const gap = frameTime - this.previousFrameMs;
+        this.maxFrameGapMs = Math.max(this.maxFrameGapMs, gap);
+        this.frameIntervals.push(gap);
+        if (this.frameIntervals.length > 180) this.frameIntervals.shift();
+      }
+      this.previousFrameMs = frameTime;
+      if (this.now() < this.attempt.scheduledOffMs) {
+        this.pollSignalFrame(generation);
+        return;
+      }
+      this.lights = 0;
+      this.state = 'signal';
+      this.onSignal(); // only five existing light-class mutations
+      this.attempt.softwareOnsetMs = this.now(); // adjacent marker in this rAF
+      this.attempt.onsetFrameTimestampMs = frameTime;
+      this.onChange(this); // adapter records state; no competing visible cue
+    });
+  }
+
+  cancel(reason = 'Attempt cancelled') {
+    if (!this.active) return;
+    this.stopScheduled();
+    this.state = 'cancelled';
+    this.lights = 0;
+    this.attempt = null;
+    this.cancelReason = reason;
+    this.onChange(this);
+  }
+
+  clearHeld() { this.held.clear(); this.roundInputs.clear(); this.releaseIds.clear(); }
+}
+
+// Each aoN drops exactly one fastest and one slowest score. Penalties remain
+// numeric 500 ms scores; slow successful reactions are never clipped.
+function rollingAverage(records, endIndex, size) {
+  if (!Number.isInteger(size) || size < 3) throw new RangeError('Average size must be at least three');
+  if (endIndex < size - 1 || endIndex >= records.length) return null;
+  const scores = records.slice(endIndex - size + 1, endIndex + 1).map(record => record.scoreMs);
+  if (scores.some(score => !Number.isFinite(score) || score < 0)) return null;
+  scores.sort((a, b) => a - b);
+  return scores.slice(1, -1).reduce((sum, score) => sum + score, 0) / (size - 2);
+}
+
+function historyWindow(length, requestedCount = 50, requestedEnd = length) {
+  const count = Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, Math.round(Number(requestedCount)) || 50));
+  const end = Math.max(0, Math.min(length, Math.round(Number(requestedEnd)) || 0));
+  return { count, end, start: Math.max(0, end - count) };
+}
+
+function tableRows(records, viewport) {
+  return records.slice(viewport.start, viewport.end).map((record, offset) => {
+    const index = viewport.start + offset;
+    return { record, round: index + 1, ao5: rollingAverage(records, index, 5), ao12: rollingAverage(records, index, 12) };
+  });
+}
+
+// One trusted stream per device. Mouse chords produce pointermove events.
+function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
+  const controls = 'button, a, input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [data-control]';
+  const isControl = event => event.composedPath().some(node => node instanceof Element && node.matches(controls));
+  const reserved = event => (event.shiftKey && /^(Space|Arrow.*|Home|End|PageUp|PageDown|Enter)$/.test(event.code)) || event.ctrlKey || event.metaKey || event.altKey || event.isComposing || /^(Tab|Escape|Shift|Control|Alt|Meta|CapsLock|NumLock|ScrollLock|ContextMenu|PrintScreen|Pause|Dead|Unidentified|F\d{1,2}|Audio.*|Media.*|Browser.*)$/.test(event.key);
+  const contacts = new Set();
+  const send = (edge, event, device, inputId, handledAt) => {
+    if (edge === 'down' && !engine.active && !engine.held.has(inputId)) onStart();
+    engine.input(edge, eventData(event, handledAt, device, inputId));
+  };
+  const cancel = reason => { engine.cancel(reason); engine.clearHeld(); contacts.clear(); };
+  document.addEventListener('keydown', event => {
+    const handledAt = performance.now();
+    if (!event.isTrusted) return;
+    if (event.key === 'Escape') {
+      if (engine.active && !isControl(event)) event.preventDefault();
+      engine.cancel('Attempt cancelled'); return;
+    }
+    if (reserved(event)) {
+      if (engine.active && (event.ctrlKey || event.metaKey || event.altKey)) cancel('Browser shortcut');
+      return;
+    }
+    if (isControl(event)) return;
+    event.preventDefault();
+    surface.classList.remove('pointer-focused');
+    if (!event.repeat) send('down', event, 'keyboard', `key:${event.code || event.key}`, handledAt);
+  });
+  document.addEventListener('keyup', event => {
+    const handledAt = performance.now();
+    if (!event.isTrusted) return;
+    const id = `key:${event.code || event.key}`;
+    if (!engine.held.has(id)) return;
+    if (reserved(event) || isControl(event)) { cancel('Focus moved to a control'); return; }
+    event.preventDefault(); send('up', event, 'keyboard', id, handledAt);
+  });
+  function capture(event) {
+    surface.classList.add('pointer-focused');
+    surface.focus({ preventScroll: true });
+    if (event.type === 'pointerdown') {
+      try { surface.setPointerCapture(event.pointerId); } catch { /* inactive pointer */ }
+    }
+  }
+  function pointer(event) {
+    const handledAt = performance.now();
+    if (!event.isTrusted) return;
+    if (event.pointerType === 'mouse') {
+      // button is the transition; buttons is the resulting held mask. In a
+      // chord, intermediate presses/releases are pointermove events. Never
+      // infer new presses from an old held mask after blur/cancellation.
+      const bit = { 0: 1, 2: 2, 1: 4 }[event.button];
+      if (!bit) return; // ordinary movement has button === -1
+      const id = `mouse:${event.button}`, down = Boolean(event.buttons & bit);
+      if (down && (isControl(event) || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return;
+      if (!down && !engine.held.has(id)) return;
+      event.preventDefault();
+      if (down) capture(event);
+      send(down ? 'down' : 'up', event, 'mouse', id, handledAt);
+      return;
+    }
+    if (!['touch', 'pen'].includes(event.pointerType)) return;
+    const id = `pointer:${event.pointerId}`;
+    if (event.type === 'pointerdown') {
+      contacts.add(event.pointerId);
+      if (contacts.size > 1 || !event.isPrimary) { cancel('Multiple contacts'); return; }
+      if (isControl(event)) return;
+      event.preventDefault(); capture(event);
+      send('down', event, event.pointerType, id, handledAt);
+    } else if (event.type === 'pointerup') {
+      contacts.delete(event.pointerId);
+      if (!engine.held.has(id)) return;
+      event.preventDefault(); send('up', event, event.pointerType, id, handledAt);
+    }
+  }
+  if (globalThis.PointerEvent) {
+    for (const type of ['pointerdown', 'pointermove', 'pointerup']) document.addEventListener(type, pointer, { passive: false });
+  } else {
+    // Legacy WebKit has Touch Events but no Pointer Events. Preventing the
+    // accepted touchstart default suppresses its compatibility mouse stream.
+    for (const type of ['touchstart', 'touchend', 'touchcancel']) document.addEventListener(type, event => {
+      const handledAt = performance.now();
+      if (!event.isTrusted) return;
+      if (type === 'touchcancel') { cancel('Touch cancelled'); return; }
+      if (event.touches.length > 1) { cancel('Multiple contacts'); return; }
+      if (type === 'touchstart' && isControl(event)) return;
+      event.preventDefault();
+      for (const touch of event.changedTouches) {
+        const id = `touch:${touch.identifier}`;
+        if (type === 'touchstart') { surface.focus({ preventScroll: true }); send('down', event, 'touch', id, handledAt); }
+        else if (engine.held.has(id)) send('up', event, 'touch', id, handledAt);
+      }
+    }, { passive: false });
+    for (const type of ['mousedown', 'mouseup']) document.addEventListener(type, event => {
+      const handledAt = performance.now();
+      if (!event.isTrusted || event.sourceCapabilities?.firesTouchEvents || ![0, 1, 2].includes(event.button)) return;
+      const id = `mouse:${event.button}`;
+      if (type === 'mousedown' && (isControl(event) || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return;
+      if (type === 'mouseup' && !engine.held.has(id)) return;
+      event.preventDefault(); if (type === 'mousedown') surface.focus({ preventScroll: true });
+      send(type === 'mousedown' ? 'down' : 'up', event, 'mouse', id, handledAt);
+    });
+  }
+  function cancelledPointer(event, reason) {
+    const ids = event.pointerType === 'mouse'
+      ? [...engine.held.keys()].filter(id => id.startsWith('mouse:'))
+      : [`pointer:${event.pointerId}`].filter(id => engine.held.has(id));
+    const current = ids.some(id => engine.roundInputs.has(id));
+    if (engine.active && current) cancel(reason);
+    else for (const id of ids) engine.held.delete(id); // retired response tail
+  }
+  document.addEventListener('pointercancel', event => {
+    if (!event.isTrusted) return;
+    contacts.delete(event.pointerId);
+    cancelledPointer(event, 'Pointer cancelled');
+  });
+  surface.addEventListener('lostpointercapture', event => cancelledPointer(event, 'Pointer capture lost'));
+  // Mouse compatibility events never feed the engine, so touch cannot double fire.
+  for (const type of ['click', 'auxclick', 'contextmenu', 'dragstart']) document.addEventListener(type, event => {
+    if (!isControl(event) && !(event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) event.preventDefault();
+  });
+  window.addEventListener('blur', () => cancel('Window lost focus'));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel('Tab became hidden'); });
+  window.addEventListener('pagehide', () => cancel('Page closed'));
+}
+
+
+const $ = selector => document.querySelector(selector);
+const stage = $('.stage');
+const lights = [...document.querySelectorAll('.light')];
+const storageKey = 'lights-out.reaction-lab.v2';
+const deviceLabel = { keyboard: 'Key', mouse: 'Mouse', touch: 'Touch', pen: 'Pen', trackpad: 'Trackpad', 'mouse-physical': 'Mouse' };
+const inputLabel = record => `${deviceLabel[record.device] || record.device} ${record.responseEdge === 'up' ? '↑' : '↓'}`;
+const uuid = () => globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+let records = [], lastRecord = null, renderedLights = -1, storageAvailable = true;
+try {
+  const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+  if (saved?.version === 2) records = (saved.records || []).filter(r => Number.isFinite(r.scoreMs) && r.scoreMs >= 0 && typeof r.falseStart === 'boolean' && (r.falseStart ? r.reactionMs === null : Number.isFinite(r.reactionMs)));
+} catch { storageAvailable = false; }
+lastRecord = records[records.length - 1] || null;
+let viewport = historyWindow(records.length), followLatest = true;
+let lastFrameHandledAt = performance.now();
+const MAX_FRAME_GAP_MS = 100;
+const engine = new ReactionEngine({
+  now: () => performance.now(), setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: id => clearTimeout(id),
+  requestFrame: fn => requestAnimationFrame(fn), cancelFrame: id => cancelAnimationFrame(id),
+  invalidReason: () => document.hidden ? 'Tab became hidden' : performance.now() - lastFrameHandledAt > MAX_FRAME_GAP_MS ? 'Frame gap over 100 ms' : null,
+  onSignal: () => { for (const light of lights) light.classList.remove('on'); renderedLights = 0; },
+  onChange: renderState,
+  onResult: record => {
+    lastRecord = { ...record, id: uuid(), completedAt: new Date().toISOString(), documentHasFocus: document.hasFocus() };
+    records.push(lastRecord);
+    if (followLatest) viewport = historyWindow(records.length, viewport.count);
+    save(); renderHistory();
+  },
+});
+function save() {
+  try { localStorage.setItem(storageKey, JSON.stringify({ version: 2, records })); }
+  catch { storageAvailable = false; }
+  $('#storage-note').hidden = storageAvailable;
+  $('#storage-note').textContent = 'Browser storage is unavailable or full. New results remain in memory for this visit.';
+}
+function monitor(frameTime) {
+  engine.observeFrame(frameTime);
+  if (engine.active) engine.guardTiming();
+  lastFrameHandledAt = performance.now();
+  requestAnimationFrame(monitor);
+}
+requestAnimationFrame(monitor);
+function renderState() {
+  document.body.classList.toggle('is-running', engine.active);
+  stage.dataset.state = engine.state;
+  if (engine.state === 'signal') { $('.lights').setAttribute('aria-label', 'All five lights off'); return; }
+  if (renderedLights !== engine.lights) {
+    lights.forEach((light, index) => light.classList.toggle('on', index < engine.lights));
+    renderedLights = engine.lights;
+  }
+  $('.lights').setAttribute('aria-label', engine.lights ? `${engine.lights} of 5 red lights on` : 'All five lights off');
+  if (engine.active) return;
+  stage.classList.toggle('false-start', Boolean(lastRecord?.falseStart) && engine.state !== 'cancelled');
+  stage.classList.toggle('long-score', Boolean(lastRecord) && String(Math.round(lastRecord.scoreMs)).length > 4);
+  $('#result-value').replaceChildren(document.createTextNode(lastRecord ? String(Math.round(lastRecord.scoreMs)) : '—'));
+  const unit = document.createElement('span'); unit.textContent = ' ms'; $('#result-value').append(unit);
+  $('#start-hint').textContent = engine.state === 'cancelled' ? `${engine.cancelReason}. Press or touch anywhere.` : lastRecord?.falseStart ? 'False start · press or touch anywhere' : 'Press or touch anywhere';
+  if (engine.state === 'result') $('#announcement').textContent = `${lastRecord.falseStart ? 'False start, penalty' : 'Reaction'} ${Math.round(lastRecord.scoreMs)} milliseconds`;
+}
+const svgNS = 'http://www.w3.org/2000/svg';
+function node(tag, attributes = {}, text) {
+  const el = document.createElementNS(svgNS, tag);
+  for (const [key, value] of Object.entries(attributes)) el.setAttribute(key, String(value));
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+function renderChart(rows) {
+  const width = Math.max(280, $('#chart').clientWidth), height = width > 760 ? 250 : 255;
+  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': rows.length ? `Reaction scores for rounds ${rows[0].round} to ${rows[rows.length - 1].round}` : 'Empty reaction history' });
+  const left = 61, right = width - 10, top = 15, bottom = height - 49;
+  let largest = 0; for (const row of rows) largest = Math.max(largest, row.record.scoreMs);
+  const maximum = Math.max(600, Math.ceil(largest / 100 + 1) * 100);
+  const y = score => bottom - score / maximum * (bottom - top);
+  const x = index => rows.length > 1 ? left + index / (rows.length - 1) * (right - left) : (left + right) / 2;
+  for (let i = 0; i <= 6; i++) {
+    const value = maximum / 6 * i, yy = y(value);
+    svg.append(node('line', { x1: left, x2: right, y1: yy, y2: yy, stroke: '#343434', 'stroke-width': 1 }));
+    svg.append(node('text', { x: left - 10, y: yy + 5, 'text-anchor': 'end', fill: '#ddd', 'font-size': 16 }, `${Math.round(value)}${i === 6 ? ' ms' : ''}`));
+  }
+  const tickStep = Math.max(1, Math.ceil(rows.length / 7));
+  rows.forEach((row, i) => {
+    if (i % tickStep && i !== rows.length - 1) return;
+    svg.append(node('line', { x1: x(i), x2: x(i), y1: top, y2: bottom + 10, stroke: '#343434', 'stroke-width': 1 }));
+    svg.append(node('text', { x: x(i), y: bottom + 31, 'text-anchor': 'middle', fill: '#ddd', 'font-size': 16 }, row.round));
+  });
+  if (rows.length) {
+    svg.append(node('polyline', { points: rows.map((row, i) => `${x(i)},${y(row.record.scoreMs)}`).join(' '), fill: 'none', stroke: '#eee', 'stroke-width': 1.7 }));
+    rows.forEach((row, i) => svg.append(node('circle', { cx: x(i), cy: y(row.record.scoreMs), r: rows.length > 100 ? 2 : 4.5, fill: row.record.falseStart ? '#ff0026' : '#eee' })));
+  }
+  svg.append(node('text', { x: (left + right) / 2, y: height - 2, 'text-anchor': 'middle', fill: '#ddd', 'font-size': 15 }, 'Round'));
+  $('#chart').replaceChildren(svg);
+}
+function renderOverview() {
+  const width = 1000, height = 30, svg = node('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'none' });
+  let maximum = 600; for (const record of records) maximum = Math.max(maximum, record.scoreMs);
+  const step = Math.max(1, Math.ceil(records.length / 400));
+  const points = [];
+  for (let index = 0; index < records.length; index += step) {
+    const bucket = records.slice(index, index + step);
+    const low = Math.min(...bucket.map(r => r.scoreMs)), high = Math.max(...bucket.map(r => r.scoreMs));
+    const x = index / Math.max(1, records.length - 1) * width;
+    points.push(`${x},${height - low / maximum * 26 - 2}`, `${x},${height - high / maximum * 26 - 2}`);
+  }
+  svg.append(node('polyline', { points: points.join(' '), fill: 'none', stroke: '#777', 'stroke-width': .8 }));
+  if (records.length) svg.append(node('rect', { x: viewport.start / records.length * width, y: 0, width: (viewport.end - viewport.start) / records.length * width, height, fill: '#ffffff0b', stroke: '#b0b0b0', 'stroke-width': 1.2 }));
+  $('#overview-graph').replaceChildren(svg);
+}
+function renderHistory() {
+  const rows = tableRows(records, viewport), body = $('#history-rows'); body.replaceChildren();
+  const formatAverage = value => value === null ? '—' : value.toFixed(1);
+  for (const row of [...rows].reverse()) {
+    const tr = document.createElement('tr'); tr.classList.toggle('false-start', row.record.falseStart);
+    tr.dataset.round = row.round;
+    const values = [row.round, Math.round(row.record.scoreMs), formatAverage(row.record.falseStart ? null : row.ao5), formatAverage(row.record.falseStart ? null : row.ao12), row.record.falseStart ? 'False start' : inputLabel(row.record)];
+    for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
+    tr.lastChild.title = inputLabel(row.record);
+    tr.lastChild.setAttribute('aria-label', `${row.record.falseStart ? 'False start · ' : ''}${inputLabel(row.record)}`);
+    body.append(tr);
+  }
+  renderChart(rows);
+  $('#window-label').textContent = rows.length ? `${followLatest ? 'Last ' + rows.length + ' attempts' : (viewport.start + 1) + '–' + viewport.end} · ${records.length} total` : 'No attempts yet';
+  $('#window-size').value = viewport.count;
+  $('#window-size').max = Math.max(records.length, 50);
+  $('#history-position').max = records.length;
+  $('#history-position').min = 0;
+  $('#history-position').value = viewport.end;
+  $('#history-position').disabled = records.length <= viewport.count;
+  renderOverview();
+}
+function browse(end, count = viewport.count) {
+  viewport = historyWindow(records.length, count, end); followLatest = viewport.end === records.length; renderHistory();
+}
+$('#window-size').addEventListener('change', event => browse(viewport.end, event.target.value));
+$('#history-position').addEventListener('input', event => browse(Math.max(Math.min(viewport.count, records.length), Number(event.target.value))));
+$('#chart').addEventListener('keydown', event => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const actions = { ArrowLeft: () => browse(Math.max(viewport.count, viewport.end - 1)), ArrowRight: () => browse(viewport.end + 1), Home: () => browse(Math.min(viewport.count, records.length)), End: () => browse(records.length), '+': () => browse(viewport.end, viewport.count / 1.4), '=': () => browse(viewport.end, viewport.count / 1.4), '-': () => browse(viewport.end, viewport.count * 1.4) };
+  if (actions[event.key]) { event.preventDefault(); actions[event.key](); }
+});
+$('#chart').addEventListener('wheel', event => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  event.preventDefault(); browse(Math.max(Math.min(viewport.count, records.length), viewport.end + Math.sign(event.deltaY || event.deltaX) * Math.max(1, Math.round(viewport.count / 10))));
+}, { passive: false });
+let drag = null;
+$('#chart').addEventListener('pointerdown', event => {
+  if (event.button !== 0) return;
+  drag = { id: event.pointerId, x: event.clientX, end: viewport.end };
+  $('#chart').setPointerCapture(event.pointerId);
+});
+$('#chart').addEventListener('pointermove', event => {
+  if (!drag || event.pointerId !== drag.id) return;
+  const offset = Math.round((drag.x - event.clientX) / $('#chart').clientWidth * viewport.count);
+  browse(Math.max(Math.min(viewport.count, records.length), drag.end + offset));
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) $('#chart').addEventListener(type, () => { drag = null; });
+bindInputs({ engine, surface: stage, eventData: (event, handledAt, device, inputId) => {
+  const eventTimeMs = normalizeEventTime(event.timeStamp, handledAt, performance.timeOrigin);
+  return { device, inputId, eventTimeMs, rawEventTimestamp: event.timeStamp, handlerAtMs: handledAt, handlerDelayMs: eventTimeMs === null ? null : handledAt - eventTimeMs, eventType: event.type, pointerType: event.pointerType || null, key: event.key || null, code: event.code || null, button: event.button ?? null, buttons: event.buttons ?? null, timeOriginMs: performance.timeOrigin };
+}, onStart: () => { lastFrameHandledAt = performance.now(); } });
+// Only an executing app changes the static attachment-preview fallback prompt.
+save(); renderHistory(); renderState();
+document.documentElement.dataset.runtime = 'ready';
+if (globalThis.ResizeObserver) new ResizeObserver(() => { if (!engine.active) renderChart(tableRows(records, viewport)); }).observe($('#chart'));
+
+</script>
+</body>
+</html>
