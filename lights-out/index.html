@@ -96,6 +96,10 @@ body.is-running .light { width: clamp(38px, 12vw, 64px); }
 .history-tabs button[aria-selected=true] { color: #eee; border-bottom-color: #aaa; }
 .history-tabs button:focus-visible { outline: 1px solid #888; outline-offset: 3px; }
 
+.input-trace { position: fixed; z-index: 10; bottom: 8px; right: 8px; left: 8px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 8px; background: #171717; border: 1px solid #555; color: #ddd; font: 12px Arial, sans-serif; }
+.input-trace button { border: 1px solid #777; border-radius: 3px; padding: 7px 10px; color: #eee; background: #292929; font: inherit; }
+body.is-running .input-trace { display: none; }
+
 </style>
 </head>
 <body>
@@ -558,7 +562,7 @@ function createKeyboardTracker() {
 }
 
 // One trusted stream per device. Mouse chords produce pointermove events.
-function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
+function bindInputs({ engine, surface, eventData, onStart = () => {}, diagnostics = null }) {
   const controls = 'button, a, input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [data-control]';
   const isControl = event => event.composedPath().some(node => node instanceof Element && node.matches(controls));
   const reserved = event => {
@@ -571,7 +575,7 @@ function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
     if (edge === 'down' && !engine.active && !engine.held.has(inputId)) onStart();
     engine.input(edge, preparedData ? { ...preparedData, inputId } : eventData(event, handledAt, device, inputId));
   };
-  const cancel = (reason, resetKeyboard = false) => { engine.cancel(reason); engine.clearHeld(); contacts.clear(); if (resetKeyboard) keyboard.clear(); };
+  const cancel = (reason, resetKeyboard = false) => { engine.cancel(reason); engine.clearHeld(); contacts.clear(); if (resetKeyboard) { keyboard.clear(); diagnostics?.('keyboard:reset', { reason }); } };
   document.addEventListener('keydown', event => {
     const handledAt = performance.now();
     if (!event.isTrusted) return;
@@ -580,10 +584,12 @@ function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
       engine.cancel('Attempt cancelled'); return;
     }
     if (reserved(event)) {
+      diagnostics?.('keyboard:reserved', { edge: 'down' });
       if (engine.active && (event.ctrlKey || event.metaKey || event.altKey)) cancel('Browser shortcut');
       return;
     }
     const data = eventData(event, handledAt, 'keyboard', null), press = keyboard.down(event, data.eventTimeMs);
+    diagnostics?.('keyboard:down', { id: isControl(event) ? '[control]' : press.id ?? null, fresh: press.fresh ?? null, ambiguous: Boolean(press.ambiguous), control: isControl(event) });
     if (press.ambiguous) { if (engine.active) cancel('Ambiguous keyboard input'); return; }
     if (isControl(event)) return;
     event.preventDefault();
@@ -594,6 +600,7 @@ function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
     const handledAt = performance.now();
     if (!event.isTrusted) return;
     const data = eventData(event, handledAt, 'keyboard', null), press = keyboard.up(event, data.eventTimeMs);
+    diagnostics?.('keyboard:up', { id: isControl(event) ? '[control]' : press.id ?? null, stale: Boolean(press.stale), ambiguous: Boolean(press.ambiguous), control: isControl(event) });
     if (press.ambiguous) { if (engine.active) cancel('Ambiguous keyboard input'); return; }
     const id = press.id;
     if (!id || press.stale || !engine.held.has(id)) return;
@@ -689,6 +696,119 @@ function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
   window.addEventListener('pagehide', () => cancel('Page closed', true));
 }
 
+// Opt-in, page-local investigation. Never stores or sends a trace automatically.
+function createInputTrace(enabled) {
+  if (!enabled) return null;
+  const limit = 2048, events = [], listeners = [], restorers = [];
+  let engine = null, sequence = 0, running = true, lastPhase = '', inputCall = null, lastFalseStart = null, falseStarts = 0;
+  const version = 'input-trace-20261016.1';
+  const editable = target => target instanceof Element && Boolean(target.closest('input,textarea,[contenteditable]:not([contenteditable="false"])'));
+  const targetName = target => target === window ? 'window' : target === document ? 'document' : target instanceof Element ? target.tagName.toLowerCase() + (target.id ? '#' + target.id : '') : 'other';
+  function snapshot() {
+    if (!engine) return null;
+    const attempt = engine.attempt;
+    return {
+      state: engine.state, lights: engine.lights, generation: engine.generation,
+      held: [...engine.held].map(([id, device]) => ({ id, device, since: engine.heldSince.get(id) })),
+      roundInputs: [...engine.roundInputs], releaseIds: [...engine.releaseIds],
+      attempt: attempt && Object.fromEntries(['startedAtMs','startedHandlerAtMs','allLightsOnMs','fixedHoldMs','sampledDelayMs','scheduledRandomWaitStartMs','scheduledOffMs','softwareOnsetMs','onsetFrameTimestampMs'].map(key => [key, attempt[key] ?? null])),
+      cancelReason: engine.state === 'cancelled' ? engine.cancelReason : null,
+    };
+  }
+  function note(type, data = {}) {
+    if (!running) return null;
+    const entry = { sequence: ++sequence, observedAt: performance.now(), type, ...data };
+    events.push(entry); if (events.length > limit) events.shift();
+    return entry;
+  }
+  function inputFields(value) {
+    return Object.fromEntries(['device','inputId','eventType','eventTimeMs','rawEventTimestamp','handlerAtMs','handlerDelayMs','key','code','button','buttons','pointerType'].map(key => [key, value[key] ?? null]));
+  }
+  function observe(event) {
+    if (event.type === 'pointermove' && event.button === -1) return;
+    const entry = note('dom:' + event.type, {
+      eventTimeStamp: event.timeStamp, trusted: event.isTrusted, target: targetName(event.target),
+      focused: document.hasFocus(), visibility: document.visibilityState, activeElement: targetName(document.activeElement),
+      before: snapshot(),
+      ...(event instanceof KeyboardEvent ? {
+        editable: editable(event.target), key: editable(event.target) ? '[redacted]' : event.key,
+        code: editable(event.target) ? '[redacted]' : event.code, keyCode: editable(event.target) ? null : event.keyCode,
+        location: event.location, repeat: event.repeat, composing: event.isComposing,
+        ctrl: event.ctrlKey, alt: event.altKey, meta: event.metaKey, shift: event.shiftKey,
+      } : {}),
+      ...(event instanceof MouseEvent ? { button: event.button, buttons: event.buttons } : {}),
+      ...(globalThis.PointerEvent && event instanceof PointerEvent ? { pointerId: event.pointerId, pointerType: event.pointerType, primary: event.isPrimary } : {}),
+    });
+    if (entry) queueMicrotask(() => { entry.after = snapshot(); entry.defaultPrevented = event.defaultPrevented; });
+  }
+  for (const type of ['keydown','keyup','pointerdown','pointermove','pointerup','pointercancel','lostpointercapture','mousedown','mouseup','click','blur','focus','visibilitychange','pagehide']) {
+    window.addEventListener(type, observe, true); listeners.push([type, observe]);
+  }
+  const panel = document.createElement('aside'); panel.className = 'input-trace'; panel.dataset.control = '';
+  const status = document.createElement('span'); status.textContent = 'Input trace on · stays in this page';
+  const download = document.createElement('button'); download.type = 'button'; download.textContent = 'Download trace';
+  const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = 'Copy trace';
+  const stop = document.createElement('button'); stop.type = 'button'; stop.textContent = 'Stop trace';
+  panel.append(status, download, copy, stop); document.querySelector('.app').append(panel);
+  const api = {
+    note,
+    attach(value) {
+      engine = value;
+      for (const name of ['input','cancel','clearHeld','forgetInput','beginCountdown','stopScheduled']) {
+        const original = engine[name];
+        engine[name] = function (...args) {
+          const before = note('engine:' + name + ':before', {
+            state: snapshot(), ...(name === 'input' ? { edge: args[0], event: inputFields(args[1]) } : name === 'beginCountdown' ? { event: inputFields(args[0]) } : { argument: args[0] ?? null }),
+          });
+          const previous = inputCall; if (name === 'input') inputCall = before?.sequence ?? null;
+          try { return original.apply(this, args); }
+          finally { note('engine:' + name + ':after', { call: before?.sequence ?? null, state: snapshot() }); inputCall = previous; }
+        };
+        restorers.push(() => { engine[name] = original; });
+      }
+      note('trace:ready', { version, state: snapshot() });
+    },
+    state() {
+      if (!running || !engine) return;
+      const phase = engine.state + ':' + engine.lights;
+      if (phase !== lastPhase) { lastPhase = phase; note('engine:phase', { state: snapshot() }); }
+    },
+    result(record) {
+      if (!running) return;
+      const result = { ...inputFields(record), ...Object.fromEntries(['startedAtMs','allLightsOnMs','fixedHoldMs','sampledDelayMs','scheduledRandomWaitStartMs','scheduledOffMs','softwareOnsetMs','responseEdge','modeKey','falseStart','reactionMs','scoreMs','maxTrialFrameGapMs'].map(key => [key, record[key] ?? null])) };
+      const entry = note('engine:result', { inputCall, reason: record.falseStart ? record.softwareOnsetMs === null ? 'input-before-software-onset' : 'event-timestamp-before-software-onset' : 'response-after-software-onset', result, state: snapshot() });
+      if (record.falseStart) {
+        falseStarts += 1;
+        // Preserve the causal window even if later auto-repeat fills the ring.
+        lastFalseStart = { entry: structuredClone(entry), precedingEvents: structuredClone(events.slice(-256)) };
+        status.textContent = `Input trace · ${falseStarts} false start${falseStarts === 1 ? '' : 's'} captured · download when the bug occurs`;
+      }
+    },
+    json() {
+      return JSON.stringify({ schema: 1, version, page: location.origin + location.pathname, userAgent: navigator.userAgent, platform: navigator.platform, timeOrigin: performance.timeOrigin, capturedAt: new Date().toISOString(), running, eventLimit: limit, eventsObserved: sequence, falseStarts, lastFalseStart, events }, null, 2);
+    },
+    stop() {
+      if (!running) return;
+      note('trace:stopped'); running = false;
+      for (const [type, listener] of listeners.splice(0)) window.removeEventListener(type, listener, true);
+      for (const restore of restorers.splice(0).reverse()) restore();
+      status.textContent = 'Input trace stopped · ready to download'; stop.disabled = true;
+    },
+  };
+  download.addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([api.json()], { type: 'application/json' })), link = document.createElement('a');
+    link.href = url; link.download = 'lights-out-input-trace.json'; panel.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(api.json()); status.textContent = 'Trace copied · paste it into the conversation'; }
+    catch { status.textContent = 'Clipboard unavailable · use Download trace'; }
+  });
+  stop.addEventListener('click', () => api.stop());
+  globalThis.__lightsOutInputTrace = api;
+  return api;
+}
+
 
 const $ = selector => document.querySelector(selector);
 const stage = $('.stage');
@@ -708,6 +828,7 @@ recentSaved = bestSaved = null; // release any large legacy snapshot after bound
 let viewport = historyWindow(records.length), followLatest = true;
 let lastFrameHandledAt = performance.now();
 const MAX_FRAME_GAP_MS = 100;
+const inputTrace = createInputTrace(new URLSearchParams(location.search).get('trace') === '1');
 const engine = new ReactionEngine({
   now: () => performance.now(), setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: id => clearTimeout(id),
   requestFrame: fn => requestAnimationFrame(fn), cancelFrame: id => cancelAnimationFrame(id),
@@ -715,6 +836,7 @@ const engine = new ReactionEngine({
   onSignal: () => { for (const light of lights) light.classList.remove('on'); renderedLights = 0; },
   onChange: renderState,
   onResult: record => {
+    inputTrace?.result(record);
     lastRecord = { ...record, id: uuid(), completedAt: new Date().toISOString(), documentHasFocus: document.hasFocus() };
     history = appendHistory(history, lastRecord);
     records = history.records; best = history.lifetimeBests; lastRecord = history.latest;
@@ -723,6 +845,7 @@ const engine = new ReactionEngine({
     $('.table-scroll').scrollTop = 0;
   },
 });
+inputTrace?.attach(engine);
 function save() {
   let bestSaved = false, recentSaved = false;
   // Save pending results with the independent ledger before the recent buffer.
@@ -745,6 +868,7 @@ function monitor(frameTime) {
 }
 requestAnimationFrame(monitor);
 function renderState() {
+  inputTrace?.state();
   document.body.classList.toggle('is-running', engine.active);
   stage.dataset.state = engine.state;
   if (engine.state === 'signal') { $('.lights').setAttribute('aria-label', 'All five lights off'); return; }
@@ -933,7 +1057,7 @@ function bindHistoryDrag(target, chart = false) {
 }
 bindHistoryDrag($('#chart'), true);
 bindHistoryDrag($('.overview'));
-bindInputs({ engine, surface: stage, eventData: (event, handledAt, device, inputId) => {
+bindInputs({ engine, surface: stage, diagnostics: inputTrace?.note, eventData: (event, handledAt, device, inputId) => {
   const eventTimeMs = normalizeEventTime(event.timeStamp, handledAt, performance.timeOrigin);
   return { device, inputId, eventTimeMs, rawEventTimestamp: event.timeStamp, handlerAtMs: handledAt, handlerDelayMs: eventTimeMs === null ? null : handledAt - eventTimeMs, eventType: event.type, pointerType: event.pointerType || null, key: event.key || null, code: event.code || null, button: event.button ?? null, buttons: event.buttons ?? null, timeOriginMs: performance.timeOrigin };
 }, onStart: () => { lastFrameHandledAt = performance.now(); } });
