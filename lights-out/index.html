@@ -117,7 +117,26 @@ body.is-running .input-trace { display: none; }
   .best-summary { font-size: 10px; margin-top: 9px; }
   .history-workspace { top: calc(50dvh + var(--light-size) / 2 + 24px); }
 }
-@media(prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; } }
+@media(max-width:760px), (max-width:1000px) and (hover:none) and (pointer:coarse) {
+  html, body { height: auto; min-height: 100dvh; overflow-x: clip; overflow-y: auto; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  .stage { opacity: var(--stage-opacity, 1); }
+  .history-workspace {
+    position: relative; inset: auto; margin-top: calc(50dvh + var(--light-size) / 2 + 38px);
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    overflow: visible; overscroll-behavior: auto; scrollbar-gutter: auto; background: #000;
+  }
+  .table-scroll { max-height: none; overflow: visible; overscroll-behavior: auto; }
+  th { top: env(safe-area-inset-top, 0px); }
+  html.round-active { height: 100%; overflow: hidden; }
+  body.is-running { position: fixed; inset: 0; height: 100dvh; overflow: hidden; }
+  body.is-running .stage { opacity: 1; touch-action: none; }
+}
+@media(prefers-reduced-motion:reduce) {
+  * { scroll-behavior: auto !important; }
+  .stage { opacity: 1; }
+}
 
 </style>
 </head>
@@ -148,7 +167,7 @@ body.is-running .input-trace { display: none; }
       </section>
       <p id="storage-note" role="status" hidden></p>
     </div>
-    <dialog id="clear-history-dialog" data-control aria-labelledby="clear-history-title" aria-describedby="clear-history-description"><form method="dialog"><h2 id="clear-history-title">Clear Recent history?</h2><p id="clear-history-description">Recent attempts, graphs and current averages will be cleared. Your saved personal bests and Best top 20 will be kept.</p><div class="dialog-actions"><button type="submit" value="cancel" autofocus>Cancel</button><button type="submit" value="clear" class="confirm-clear">Clear Recent history</button></div></form></dialog>
+    <dialog id="clear-history-dialog" data-control aria-labelledby="clear-history-title" aria-describedby="clear-history-description"><form method="dialog"><h2 id="clear-history-title">Clear all history and records?</h2><p id="clear-history-description">All attempts, Best top 20, personal bests, averages and graphs will be cleared in this browser, including other open tabs. This cannot be undone.</p><div class="dialog-actions"><button type="submit" value="cancel" autofocus>Cancel</button><button type="submit" value="clear" class="confirm-clear">Clear all history and records</button></div></form></dialog>
     <p id="announcement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
   </main>
   <script>
@@ -464,11 +483,12 @@ function mergeStoredBests(previous, record) {
   }
   return best;
 }
-function emptyHistory() {
-  return { records: [], bestRecords: [], lifetimeBests: emptyBests(), totalAttempts: 0, rollingScores: [], latest: null, pendingRecent: [], recentClearedThrough: 0 };
+function emptyHistory(resetEpoch = '') {
+  return { records: [], bestRecords: [], lifetimeBests: emptyBests(), totalAttempts: 0, rollingScores: [], latest: null, pendingRecent: [], recentClearedThrough: 0, resetEpoch };
 }
-function clearRecentHistory(state) {
-  return { ...state, records: [], rollingScores: [], latest: null, pendingRecent: [], recentClearedThrough: state.totalAttempts };
+function clearHistory(resetEpoch) {
+  if (typeof resetEpoch !== 'string' || !resetEpoch) throw new TypeError('A full reset requires a new epoch');
+  return emptyHistory(resetEpoch);
 }
 function appendHistory(state, input) {
   if (!valid(input)) throw new TypeError('Invalid reaction record');
@@ -484,11 +504,16 @@ function appendHistory(state, input) {
     totalAttempts: record.round, rollingScores: [...state.rollingScores, record.scoreMs].slice(-11), latest: compact(record),
     pendingRecent: [...(state.pendingRecent || []), compact(record)].slice(-RECENT_LIMIT),
     recentClearedThrough: cutoff(state.recentClearedThrough),
+    resetEpoch: state.resetEpoch || '',
   };
 }
-function restoreHistory(recentSaved, bestSaved = null) {
+function restoreHistory(recentSaved, bestSaved = null, resetEpoch = '') {
+  // The separate reset marker is authoritative, even if an old/suspended tab
+  // rewrites both data keys. Never migrate or recover data from a retired epoch.
+  if ((recentSaved?.resetEpoch || '') !== resetEpoch) recentSaved = null;
+  if ((bestSaved?.resetEpoch || '') !== resetEpoch) bestSaved = null;
   if (!recentSaved || recentSaved.version !== 3) {
-    let state = emptyHistory();
+    let state = emptyHistory(resetEpoch);
     // Stream legacy data and preserve its best ledger before pruning. A
     // separately saved ledger also survives an absent/corrupt recent buffer.
     for (const record of Array.isArray(recentSaved?.records) ? recentSaved.records : []) if (valid(record)) state = appendHistory(state, record);
@@ -534,7 +559,7 @@ function restoreHistory(recentSaved, bestSaved = null) {
   const contiguousTail = [];
   for (let i = records.length - 1, round = totalAttempts; i >= 0 && contiguousTail.length < 11 && records[i].round === round; i--, round--) contiguousTail.unshift(records[i].scoreMs);
   const rollingScores = ledger.totalAttempts === totalAttempts && cutoff(ledger.recentClearedThrough) === recentClearedThrough && tail.length ? tail : contiguousTail;
-  return { records, bestRecords, lifetimeBests, totalAttempts, rollingScores, latest, pendingRecent, recentClearedThrough };
+  return { records, bestRecords, lifetimeBests, totalAttempts, rollingScores, latest, pendingRecent, recentClearedThrough, resetEpoch };
 }
 function missingRecentCount(state) {
   const cleared = cutoff(state.recentClearedThrough);
@@ -542,10 +567,10 @@ function missingRecentCount(state) {
   return Math.max(0, Math.min(state.totalAttempts - cleared, RECENT_LIMIT) - retained);
 }
 function recentSnapshot(state, tableTab = 'recent', chart = null) {
-  return { version: 3, records: state.records, totalAttempts: state.totalAttempts, recentClearedThrough: cutoff(state.recentClearedThrough), tableTab, ...(chart ? { chart } : {}) };
+  return { version: 3, records: state.records, totalAttempts: state.totalAttempts, recentClearedThrough: cutoff(state.recentClearedThrough), resetEpoch: state.resetEpoch || '', tableTab, ...(chart ? { chart } : {}) };
 }
 function bestSnapshot(state) {
-  return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest, pendingRecent: state.pendingRecent || [], recentClearedThrough: cutoff(state.recentClearedThrough) };
+  return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest, pendingRecent: state.pendingRecent || [], recentClearedThrough: cutoff(state.recentClearedThrough), resetEpoch: state.resetEpoch || '' };
 }
 
 const keyAliases = { Spacebar: ' ', Esc: 'Escape', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Del: 'Delete', OS: 'Meta' };
@@ -918,10 +943,13 @@ const deviceLabel = { keyboard: 'Key', mouse: 'Mouse', touch: 'Touch', pen: 'Pen
 const inputLabel = record => `${deviceLabel[record.device] || record.device} ${record.responseEdge === 'up' ? '↑' : '↓'}`;
 const uuid = () => globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const bestStorageKey = 'lights-out.reaction-lab.bests.v1';
-let recentSaved = null, bestSaved = null, storageAvailable = true;
+const resetStorageKey = 'lights-out.reaction-lab.reset.v1';
+let recentSaved = null, bestSaved = null, resetEpoch = '', storageAvailable = true;
+try { resetEpoch = localStorage.getItem(resetStorageKey) || ''; } catch { storageAvailable = false; }
 try { recentSaved = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch { storageAvailable = false; }
 try { bestSaved = JSON.parse(localStorage.getItem(bestStorageKey) || 'null'); } catch { storageAvailable = false; }
-let history = restoreHistory(recentSaved, bestSaved);
+let history = restoreHistory(recentSaved, bestSaved, resetEpoch);
+if ((recentSaved?.resetEpoch || '') !== resetEpoch) recentSaved = null;
 let records = history.records, best = history.lifetimeBests, lastRecord = history.latest, renderedLights = -1;
 let tableTab = recentSaved?.tableTab === 'best' ? 'best' : 'recent';
 let chartView = recentSaved?.chart?.view === 'histogram' ? 'histogram' : 'history';
@@ -933,6 +961,34 @@ let viewport = historyWindow(records.length), followLatest = true;
 let lastFrameHandledAt = performance.now();
 const MAX_FRAME_GAP_MS = 100;
 const inputTrace = createInputTrace(new URLSearchParams(location.search).get('trace') === '1');
+const mobilePage = matchMedia('(max-width:760px), (max-width:1000px) and (hover:none) and (pointer:coarse)');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let scrollLocked = false, savedPageScroll = 0, fadeFrame = null;
+function updateStageFade() {
+  fadeFrame = null;
+  const distance = Math.max(1, Math.min(innerHeight * .6, $('.history-workspace').offsetTop));
+  stage.style.setProperty('--stage-opacity', mobilePage.matches && !engine.active && !reducedMotion.matches ? Math.max(0, 1 - scrollY / distance) : 1);
+}
+function scheduleStageFade() {
+  if (fadeFrame === null && !engine.active) fadeFrame = requestAnimationFrame(updateStageFade);
+}
+addEventListener('scroll', scheduleStageFade, { passive: true });
+addEventListener('resize', scheduleStageFade);
+visualViewport?.addEventListener('resize', scheduleStageFade);
+reducedMotion.addEventListener('change', scheduleStageFade);
+function updateRoundScroll() {
+  const lock = mobilePage.matches && engine.active;
+  const changed = lock !== scrollLocked;
+  if (changed && lock) savedPageScroll = scrollY;
+  document.body.classList.toggle('is-running', engine.active);
+  document.documentElement.classList.toggle('round-active', lock);
+  if (!changed) return;
+  scrollLocked = lock;
+  // Unlock after the fixed round state is removed, then restore the same
+  // document position rather than leaving a nested statistics scroller.
+  if (!lock) window.scrollTo({ top: savedPageScroll, behavior: 'instant' });
+  updateStageFade();
+}
 const engine = new ReactionEngine({
   now: () => performance.now(), setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: id => clearTimeout(id),
   requestFrame: fn => requestAnimationFrame(fn), cancelFrame: id => cancelAnimationFrame(id),
@@ -940,6 +996,8 @@ const engine = new ReactionEngine({
   onSignal: () => { for (const light of lights) light.classList.remove('on'); renderedLights = 0; },
   onChange: renderState,
   onResult: record => {
+    // A result begun before another tab's reset belongs to the retired epoch.
+    try { if (synchronizeReset()) return; refreshNewerHistory(); } catch {}
     inputTrace?.result(record);
     lastRecord = { ...record, id: uuid(), completedAt: new Date().toISOString(), documentHasFocus: document.hasFocus() };
     history = appendHistory(history, lastRecord);
@@ -950,12 +1008,16 @@ const engine = new ReactionEngine({
   },
 });
 inputTrace?.attach(engine);
-function save(bestAlreadySaved = false) {
-  let bestSaved = bestAlreadySaved, recentSaved = false;
+function save() {
+  let bestSaved = false, recentSaved = false, canSave = true;
+  try { synchronizeReset(); refreshNewerHistory(); } catch { canSave = false; }
   // Save pending results with the independent ledger before the recent buffer.
   // Clear the in-memory retry queue only after that buffer is safely written.
-  if (!bestSaved) try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(history))); bestSaved = true; } catch {}
-  try { localStorage.setItem(storageKey, JSON.stringify(recentSnapshot(history, tableTab, { view: chartView, step: histogramStep, range: histogramSelection }))); recentSaved = true; } catch {}
+  if (canSave) try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(history))); bestSaved = true; } catch {}
+  // A reset can occur between separate localStorage writes in another tab.
+  if (canSave) try { synchronizeReset(); } catch { canSave = false; }
+  if (canSave) try { localStorage.setItem(storageKey, JSON.stringify(recentSnapshot(history, tableTab, { view: chartView, step: histogramStep, range: histogramSelection }))); recentSaved = true; } catch {}
+  if (canSave) try { synchronizeReset(); } catch {}
   if (recentSaved) history = { ...history, pendingRecent: [] };
   storageAvailable = bestSaved && recentSaved;
   const missing = missingRecentCount(history);
@@ -973,7 +1035,7 @@ function monitor(frameTime) {
 requestAnimationFrame(monitor);
 function renderState() {
   inputTrace?.state();
-  document.body.classList.toggle('is-running', engine.active);
+  updateRoundScroll();
   stage.dataset.state = engine.state;
   if (engine.state === 'signal') { $('.lights').setAttribute('aria-label', 'All five lights off'); return; }
   if (renderedLights !== engine.lights) {
@@ -1177,7 +1239,7 @@ function renderHistory() {
   }
   renderChart(chartRows);
   $('#window-label').textContent = chartRows.length ? `${followLatest ? 'Last ' + chartRows.length + ' attempts' : chartRows[0].round + '–' + chartRows[chartRows.length - 1].round} · ${history.totalAttempts - history.recentClearedThrough} ${history.recentClearedThrough ? 'since clear' : 'total'}` : 'No recent attempts';
-  $('#clear-history').disabled = history.totalAttempts <= history.recentClearedThrough;
+  $('#clear-history').disabled = !hasHistory();
   $('#window-size').value = viewport.count;
   $('#window-size').max = Math.min(RECENT_LIMIT, Math.max(records.length, 50));
   renderOverview();
@@ -1221,32 +1283,67 @@ for (const id of ['histogram-start', 'histogram-end', 'histogram-position']) $('
   }
 });
 const clearDialog = $('#clear-history-dialog');
+function hasHistory() {
+  return history.totalAttempts > 0 || history.bestRecords.length > 0 || Object.values(best).some(value => value !== null);
+}
+function showReset(next) {
+  history = next; records = history.records; best = history.lifetimeBests; lastRecord = history.latest;
+  tableTab = 'recent'; viewport = historyWindow(records.length, viewport.count); followLatest = true; histogramSelection = { auto: true };
+  engine.stopScheduled(); engine.clearHeld(); engine.state = 'idle'; engine.lights = 0; engine.attempt = null;
+  $('#announcement').textContent = 'History and personal bests cleared.';
+  renderHistory(); renderState();
+}
+function synchronizeReset() {
+  const epoch = localStorage.getItem(resetStorageKey) || '';
+  if (epoch === history.resetEpoch) return false;
+  const read = key => { const raw = localStorage.getItem(key); try { return JSON.parse(raw || 'null'); } catch { return null; } };
+  const next = restoreHistory(read(storageKey), read(bestStorageKey), epoch);
+  if (clearDialog.open) clearDialog.close('cancel');
+  showReset(next);
+  return true;
+}
+function refreshNewerHistory() {
+  const read = key => { const raw = localStorage.getItem(key); try { return JSON.parse(raw || 'null'); } catch { return null; } };
+  const next = restoreHistory(read(storageKey), read(bestStorageKey), history.resetEpoch);
+  // A tab that still shows the just-cleared empty state must not overwrite
+  // rounds already earned in another updated tab when saving a preference.
+  if (next.totalAttempts <= history.totalAttempts) return;
+  history = next; records = history.records; best = history.lifetimeBests; lastRecord = history.latest;
+  viewport = historyWindow(records.length, viewport.count); followLatest = true;
+  renderHistory(); if (!engine.active) renderState();
+}
+const checkReset = () => { try { synchronizeReset(); } catch {} };
+addEventListener('storage', event => {
+  if (event.storageArea === localStorage && (event.key === resetStorageKey || event.key === null)) checkReset();
+});
+addEventListener('pageshow', checkReset);
+addEventListener('focus', checkReset);
+mobilePage.addEventListener('change', () => { updateRoundScroll(); scheduleStageFade(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkReset(); });
 $('#clear-history').addEventListener('click', () => {
-  if (engine.active || history.totalAttempts <= history.recentClearedThrough) return;
+  checkReset();
+  if (engine.active || !hasHistory()) return;
   clearDialog.returnValue = ''; clearDialog.showModal();
 });
-function clearConfirmedRecent() {
+function clearConfirmedHistory() {
   if (engine.active) return;
-  const cleared = clearRecentHistory(history);
-  // Secure the independent best ledger and the clear boundary before replacing
-  // Recent. If this write fails, leave all existing in-memory/Recent data intact.
-  try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(cleared))); }
+  const epoch = uuid();
+  // One small, atomic marker commits the reset before either large data key
+  // changes. Old pages never write this key; stale data cannot undo the reset.
+  try { localStorage.setItem(resetStorageKey, epoch); }
   catch {
     $('#storage-note').hidden = false;
-    $('#storage-note').textContent = 'History could not be cleared because saved records could not be secured. Nothing was cleared.';
+    $('#storage-note').textContent = 'History and records could not be cleared because the reset could not be saved. Nothing was cleared.';
     return;
   }
-  history = cleared; records = history.records; best = history.lifetimeBests; lastRecord = null;
-  tableTab = 'recent'; viewport = historyWindow(0, viewport.count); followLatest = true; histogramSelection = { auto: true };
-  engine.stopScheduled(); engine.clearHeld(); engine.state = 'idle'; engine.lights = 0; engine.attempt = null;
-  save(true); renderHistory(); renderState();
+  showReset(clearHistory(epoch));
+  save();
   $('.table-scroll').scrollTop = 0; $('.history-workspace').scrollTop = 0;
-  $('#announcement').textContent = 'Recent history cleared. Saved personal bests and Best top 20 kept.';
 }
 clearDialog.querySelector('form').addEventListener('submit', event => {
   event.preventDefault();
   const value = event.submitter?.value || 'cancel';
-  if (value === 'clear') clearConfirmedRecent();
+  if (value === 'clear') clearConfirmedHistory();
   clearDialog.close(value);
 });
 function bindHistogramDrag(target, overview = false) {
@@ -1371,7 +1468,7 @@ bindHistoryDrag($('.overview'));
 bindInputs({ engine, surface: stage, diagnostics: inputTrace?.note, eventData: (event, handledAt, device, inputId) => {
   const eventTimeMs = normalizeEventTime(event.timeStamp, handledAt, performance.timeOrigin);
   return { device, inputId, eventTimeMs, rawEventTimestamp: event.timeStamp, handlerAtMs: handledAt, handlerDelayMs: eventTimeMs === null ? null : handledAt - eventTimeMs, eventType: event.type, pointerType: event.pointerType || null, key: event.key || null, code: event.code || null, button: event.button ?? null, buttons: event.buttons ?? null, timeOriginMs: performance.timeOrigin };
-}, onStart: () => { lastFrameHandledAt = performance.now(); } });
+}, onStart: () => { checkReset(); lastFrameHandledAt = performance.now(); } });
 // Only an executing app changes the static attachment-preview fallback prompt.
 save(); renderHistory(); renderState();
 document.documentElement.dataset.runtime = 'ready';
