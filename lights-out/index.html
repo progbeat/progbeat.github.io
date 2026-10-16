@@ -8,119 +8,152 @@
   <title>Lights Out</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='black'/%3E%3Ccircle cx='16' cy='16' r='9' fill='%23ff0026'/%3E%3C/svg%3E">
   <style>
-:root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; background: #000; color: #f4f4f4; }
+:root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; background: #000; color: #eee; --accent: #00dce6; --light-size: clamp(36px, 12vw, 64px); }
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; background: #000; }
+html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
 body { -webkit-font-smoothing: antialiased; }
-.app { width: min(1180px, 100%); margin: 0 auto; padding: 76px 48px 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'game table' 'chart chart' 'storage storage'; row-gap: 35px; column-gap: 54px; align-items: start; }
-.stage { grid-area: game; text-align: center; outline: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; padding: 0 0 50px; }
-.lights { display: flex; justify-content: center; gap: 22px; margin: 0 auto 36px; width: max-content; }
-.light { display: block; width: clamp(38px, 5vw, 58px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(ellipse at 40% 26%, #3b3b3b, #303030 70%); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .4; }
+button:focus-visible, input:focus-visible, [role=slider]:focus-visible, #chart:focus-visible, .table-scroll:focus-visible { outline: 1px solid #aaa; outline-offset: 3px; }
+[hidden] { display: none !important; }
+.app { min-height: 100dvh; }
+.stage { position: fixed; inset: 0; z-index: 1; text-align: center; outline: 0; pointer-events: auto; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
+.lights { position: fixed; left: 50vw; top: 50dvh; transform: translate(-50%, -50%); display: flex; justify-content: center; gap: clamp(12px, 4vw, 22px); width: max-content; margin: 0; pointer-events: auto; }
+.light { display: block; width: var(--light-size); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(ellipse at 40% 26%, #3b3b3b, #303030 70%); }
 .light.on { background: radial-gradient(ellipse at 40% 26%, #ff1834, #ff0026 72%); box-shadow: 0 0 22px #ff002659; }
-#result-value { font-size: clamp(52px, 5vw, 72px); font-weight: 400; line-height: 1.13; letter-spacing: -2.5px; font-variant-numeric: tabular-nums; }
-#result-value span { font-size: inherit; letter-spacing: -2px; }
-#start-hint { margin: 8px 0 0; color: #b6b6b6; font-size: 20px; line-height: 1.4; }
-.best-summary { display: flex; justify-content: center; align-items: baseline; gap: 13px; margin-top: 17px; font-size: 12px; line-height: 1.4; color: #999; white-space: nowrap; }
-.best-summary strong { font-weight: 400; color: #ddd; }
-.best-label { color: #ddd; }
-.stage.long-score .best-summary { font-size: 10px; gap: 8px; }
-.stage.false-start #result-value { color: #ff0026; }
-.chart-area { grid-area: chart; min-width: 0; touch-action: pan-y; }
+.result-area { position: fixed; bottom: calc(50dvh + var(--light-size) / 2 + clamp(42px, 6dvh, 72px)); left: 50vw; transform: translateX(-50%); width: min(700px, calc(100vw - 28px)); pointer-events: auto; }
+#result-value { font-size: clamp(58px, 8vw, 102px); font-weight: 400; line-height: 1.04; letter-spacing: -4px; font-variant-numeric: tabular-nums; }
+#result-value span { font-size: .38em; letter-spacing: -1px; color: #bbb; }
+#start-hint { margin: 13px 0 0; color: #aaa; font-size: clamp(15px, 2.4vw, 20px); line-height: 1.35; }
+.best-summary { display: flex; justify-content: center; align-items: baseline; gap: 17px; margin-top: 18px; font-size: 13px; line-height: 1.4; color: #999; white-space: nowrap; }
+.best-summary strong { color: #ccc; font-weight: 400; }
+.best-label { color: #ccc; }
+.stage.false-start #result-value, .stage.false-start #result-value span { color: #ff0026; }
+.stage.long-score #result-value { font-size: clamp(40px, 7vw, 68px); letter-spacing: -2px; }
+.history-workspace { position: fixed; z-index: 2; top: calc(50dvh + var(--light-size) / 2 + 48px); bottom: 0; left: 0; right: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable both-edges; scrollbar-color: #444 #000; scrollbar-width: thin; padding: 0 clamp(16px, 4vw, 48px) 30px; }
+.chart-area, .table-area, #storage-note { max-width: 1160px; margin-left: auto; margin-right: auto; min-width: 0; }
+.chart-area { touch-action: pan-y; }
+.chart-toolbar { display: flex; flex-wrap: wrap; gap: 13px 24px; align-items: center; margin-bottom: 8px; }
+.chart-tabs, .history-tabs { display: flex; gap: 20px; }
+.chart-tabs button, .history-tabs button { appearance: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 0 0 7px; margin: 0; background: transparent; color: #888; font-size: 14px; }
+.chart-tabs button[aria-selected=true], .history-tabs button[aria-selected=true] { color: var(--accent); border-bottom-color: var(--accent); }
+#clear-history { margin-left: auto; border: 0; padding: 5px 0 8px; color: #aaa; background: transparent; font-size: 12px; }
+#clear-history:hover:enabled { color: #eee; }
+#histogram-controls { display: flex; flex: 1; gap: 10px 25px; flex-wrap: wrap; align-items: center; font-size: 11px; color: #999; }
+.step-control, .range-control { display: flex; gap: 6px; align-items: center; }
+.segmented { display: flex; border: 1px solid #333; border-radius: 5px; overflow: hidden; }
+.segmented button, .range-control button { border: 0; padding: 5px 9px; color: #aaa; background: #111; font-size: 11px; min-height: 28px; }
+.segmented button[aria-pressed=true] { background: var(--accent); color: #000; }
+.range-control button { border: 1px solid #333; border-radius: 4px; min-width: 25px; padding: 3px 7px; }
+.range-control input { width: 54px; min-width: 0; padding: 4px 0; border: 0; border-bottom: 1px solid #444; border-radius: 0; background: #000; color: #ccc; text-align: right; font-size: 11px; appearance: textfield; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.history-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 11px; color: #777; margin: 0 0 3px; }
+.window-size-label { display: flex; align-items: center; gap: 5px; }
+#window-size { font: inherit; color: #aaa; width: 40px; padding: 3px 0; border: 0; border-bottom: 1px solid #444; border-radius: 0; background: #000; appearance: textfield; text-align: right; }
+#histogram-summary { display: flex; flex-wrap: wrap; gap: 8px 17px; color: #999; font-size: 11px; margin: 0 0 3px; min-height: 16px; }
+#histogram-n { color: #ccc; }
+#histogram-fs { color: #ff6579; }
+#histogram-detail { margin-left: auto; font-variant-numeric: tabular-nums; }
 #chart { width: 100%; outline: 0; user-select: none; -webkit-user-select: none; touch-action: pan-y; cursor: grab; }
 #chart:active { cursor: grabbing; }
 #chart svg { display: block; width: 100%; height: auto; overflow: visible; }
-#chart:focus-visible, .table-scroll:focus-visible { outline: 1px solid #777; outline-offset: 5px; }
-.history-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 11px; color: #777; margin: 0 0 10px; }
-.window-size-label { display: flex; align-items: center; gap: 5px; }
-#window-size { font: inherit; color: #aaa; width: 40px; padding: 3px 0; border: 0; border-bottom: 1px solid #444; border-radius: 0; background: #000; appearance: textfield; -moz-appearance: textfield; text-align: right; }
-#window-size::-webkit-inner-spin-button, #window-size::-webkit-outer-spin-button { appearance: none; margin: 0; }
-.table-area { grid-area: table; min-width: 0; }
-.table-scroll { max-height: 298px; overflow: auto; overscroll-behavior: contain; outline: 0; scrollbar-color: #444 #000; scrollbar-width: thin; }
-table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: right; font-size: 17px; line-height: 1.25; font-variant-numeric: tabular-nums; }
-.round-column { width: 14%; }
-.score-column { width: 24%; }
-.average-column { width: 19%; }
-.input-column { width: 24%; }
-th, td { padding: 10px 10px; border-bottom: 1px solid #414141; font-weight: 400; white-space: nowrap; }
-th { position: sticky; top: 0; background: #000; border-bottom-color: #888; font-weight: 500; }
+.overview, .histogram-overview { position: relative; height: 25px; border: 1px solid #333; margin: 8px 0 0 48px; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; }
+#overview-graph svg, #histogram-overview-graph svg { display: block; width: 100%; height: 23px; }
+#history-position, #histogram-position { position: absolute; top: 0; height: 23px; border: 1px solid #999; background: #ffffff0a; touch-action: pan-y; outline: 0; cursor: grab; }
+.overview-handle { position: absolute; top: -8px; width: 24px; height: 40px; transform: translateX(-50%); touch-action: pan-y; outline: 0; cursor: ew-resize; }
+.overview-handle::after { content: ''; position: absolute; left: calc(50% - 1px); top: 8px; bottom: 8px; width: 2px; background: #ccc; }
+[role=slider][aria-disabled=true] { cursor: default; }
+.table-area { margin-top: 19px; }
+.history-tabs { margin-bottom: 5px; }
+.table-scroll { max-height: 230px; overflow: auto; overscroll-behavior: contain; outline: 0; scrollbar-color: #444 #000; scrollbar-width: thin; }
+table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: right; font-size: 14px; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.round-column { width: 14%; } .score-column { width: 24%; } .average-column { width: 19%; } .input-column { width: 24%; }
+th, td { padding: 8px 10px; border-bottom: 1px solid #333; font-weight: 400; white-space: nowrap; }
+th { position: sticky; top: 0; background: #000; border-bottom-color: #777; font-weight: 500; }
 th:first-child, td:first-child { padding-left: 0; }
 th:last-child, td:last-child { padding-right: 0; }
-tr.false-start { color: #ff0026; }
-tr.false-start td { font-weight: 600; }
+tr.false-start { color: #ff0026; } tr.false-start td { font-weight: 600; }
 .score-cell { position: relative; }
 table th:nth-child(2), table td:nth-child(2) { padding-right: 24px; }
 table th:last-child, table td:last-child { text-align: center; padding-left: 4px; padding-right: 4px; }
 .false-start-marker { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 400; letter-spacing: .3px; color: #ff6579; }
-#storage-note { grid-area: storage; color: #b6b6b6; font-size: 12px; margin-top: 24px; }
+#storage-note { color: #aaa; font-size: 12px; margin-top: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-[hidden] { display: none !important; }
-body.is-running { overflow: hidden; cursor: none; background: #000; }
+dialog { width: min(420px, calc(100vw - 32px)); padding: 25px; border: 1px solid #555; border-radius: 4px; color: #ddd; background: #080808; }
+dialog::backdrop { background: #000b; }
+dialog h2 { font-size: 19px; font-weight: 400; margin: 0 0 13px; }
+dialog p { font-size: 14px; line-height: 1.55; color: #aaa; margin: 0; }
+.dialog-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 25px; }
+.dialog-actions button { border: 1px solid #555; border-radius: 3px; padding: 9px 12px; background: #111; color: #ddd; font-size: 12px; }
+.dialog-actions .confirm-clear { border-color: #8b3540; color: #ff8a98; }
+body.is-running { cursor: none; }
 body.is-running * { cursor: none !important; }
-body.is-running .app { visibility: hidden; position: fixed; inset: 0; width: 100%; max-width: none; padding: 0; overflow: hidden; }
-body.is-running .stage { visibility: visible; position: fixed; inset: 0; width: 100%; height: 100dvh; height: 100vh; padding: 16px; display: flex; justify-content: center; align-items: center; background: #000; }
-body.is-running .stage > :not(.lights) { display: none; }
-body.is-running .lights { margin: 0; gap: clamp(12px, 4vw, 22px); }
-body.is-running .light { width: clamp(38px, 12vw, 64px); }
-@supports(height:100dvh) { body.is-running .stage { height: 100dvh; } }
-@media(max-width:760px) {
-  .app { padding: 62px 20px 30px; max-width: 540px; grid-template-columns: 1fr; grid-template-areas: 'game' 'chart' 'table' 'storage'; gap: 0; }
-  .stage { padding-bottom: 35px; }
-  .lights { gap: clamp(13px, 4vw, 20px); margin-bottom: 32px; }
-  .light { width: clamp(38px, 12vw, 58px); }
-  #result-value { font-size: clamp(54px, 15vw, 68px); letter-spacing: -2.8px; }
-  #start-hint { font-size: 17px; margin-top: 9px; }
-  .best-summary { font-size: clamp(10px, 2.8vw, 12px); gap: 9px; margin-top: 14px; }
-  .chart-area { margin-bottom: 27px; }
-  .table-scroll { max-height: 420px; }
-  table { font-size: 15px; }
-  th, td { padding: 10px 8px; }
-  .history-navigation { font-size: 10px; }
-}
-@media(max-width:360px) { .app { padding: 48px 14px 24px; } .lights { gap: 13px; } .light { width: 42px; } table { font-size: 13px; } th, td { padding: 10px 6px; } #start-hint { font-size: 15px; } }
-@media(prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; } }
-
-.overview { position: relative; height: 32px; border: 1px solid #3a3a3a; margin: 14px 0 0 61px; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; }
-#overview-graph svg { display: block; width: 100%; height: 30px; }
-#history-position { position: absolute; top: 0; height: 30px; border: 1px solid #b0b0b0; background: #ffffff0b; touch-action: pan-y; outline: 0; cursor: grab; }
-.overview-handle { position: absolute; top: -7px; width: 24px; height: 44px; transform: translateX(-50%); touch-action: pan-y; outline: 0; cursor: ew-resize; }
-.overview-handle::after { content: ''; position: absolute; left: calc(50% - 1px); top: 7px; bottom: 7px; width: 2px; background: #bbb; }
-#history-position:focus-visible, .overview-handle:focus-visible { outline: 1px solid #888; outline-offset: 2px; }
-#history-position[aria-disabled=true] { cursor: default; }
-@media(min-width:761px) { .stage { padding: 6px 0 25px; } .chart-area { padding-top: 4px; } }
-
-.stage.long-score #result-value { font-size: clamp(36px, 8vw, 48px); }
-@media(min-width:761px) { .lights { gap: clamp(10px, 2vw, 22px); } }
-
-.history-tabs { display: flex; gap: 19px; margin-bottom: 8px; }
-.history-tabs button { appearance: none; border: 0; border-bottom: 1px solid transparent; border-radius: 0; padding: 0 0 7px; margin: 0; background: transparent; color: #888; font: inherit; font-size: 14px; cursor: pointer; }
-.history-tabs button[aria-selected=true] { color: #eee; border-bottom-color: #aaa; }
-.history-tabs button:focus-visible { outline: 1px solid #888; outline-offset: 3px; }
-
+body.is-running .history-workspace, body.is-running .result-area, body.is-running #announcement { visibility: hidden; pointer-events: none; }
 .input-trace { position: fixed; z-index: 10; bottom: 8px; right: 8px; left: 8px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 8px; background: #171717; border: 1px solid #555; color: #ddd; font: 12px Arial, sans-serif; }
 .input-trace button { border: 1px solid #777; border-radius: 3px; padding: 7px 10px; color: #eee; background: #292929; font: inherit; }
 body.is-running .input-trace { display: none; }
+@media(max-width:760px) {
+  .result-area { bottom: calc(50dvh + var(--light-size) / 2 + 44px); }
+  #result-value { font-size: clamp(58px, 17vw, 80px); letter-spacing: -3px; }
+  #start-hint { margin-top: 10px; font-size: 15px; }
+  .best-summary { gap: 12px; margin-top: 16px; font-size: 11px; }
+  .history-workspace { top: calc(50dvh + var(--light-size) / 2 + 38px); padding: 0 16px 24px; }
+  .chart-toolbar { gap: 11px 15px; }
+  #histogram-controls { order: 3; flex-basis: 100%; gap: 7px 18px; }
+  .range-control { flex-wrap: wrap; }
+  .range-control input { width: 46px; }
+  #histogram-detail { margin-left: 0; }
+  .chart-tabs button, .history-tabs button { font-size: 13px; }
+  #clear-history { font-size: 11px; }
+  table { font-size: 12px; } th, td { padding: 7px 5px; }
+  .table-scroll { max-height: 300px; }
+  .history-navigation { font-size: 10px; }
+}
+@media(max-height:600px) {
+  .result-area { bottom: calc(50dvh + var(--light-size) / 2 + 16px); }
+  #result-value { font-size: 44px; letter-spacing: -2px; }
+  #start-hint { font-size: 12px; margin-top: 6px; }
+  .best-summary { font-size: 10px; margin-top: 9px; }
+  .history-workspace { top: calc(50dvh + var(--light-size) / 2 + 24px); }
+}
+@media(prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; } }
 
 </style>
 </head>
 <body>
-  <main class="app" data-desktop-layout="b">
+  <main class="app">
     <section class="stage" tabindex="0" aria-label="Reaction test. Press a key, mouse button, or touch to start.">
       <div class="lights" role="img" aria-label="All five lights off"><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i></div>
       <div class="result-area"><div id="result-value">—<span> ms</span></div><p id="start-hint">Open in a browser to play — this preview may not run JavaScript.</p><div class="best-summary" aria-label="Personal bests in milliseconds"><span class="best-label">Best:</span><span>single <strong id="best-single">—</strong></span><span>ao5 <strong id="best-ao5">—</strong></span><span>ao12 <strong id="best-ao12">—</strong></span></div></div>
     </section>
-    <section class="chart-area" data-control aria-label="Reaction graph and history browsing">
-      <div class="history-navigation"><span id="window-label">0 rounds</span><label class="window-size-label">view <input id="window-size" type="number" inputmode="numeric" min="1" value="50" aria-label="Number of visible attempts"></label></div>
-      <div id="chart" tabindex="0" role="group" aria-label="Reaction history. Drag to browse, arrow keys to move, plus or minus to zoom."></div>
-      <div class="overview" role="group" aria-label="History overview"><div id="overview-graph" aria-hidden="true"></div><div id="history-position" role="slider" tabindex="0" aria-label="Browse earlier or later history" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><div id="history-start" class="overview-handle" role="slider" tabindex="0" aria-label="First visible attempt" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><div id="history-end" class="overview-handle" role="slider" tabindex="0" aria-label="Last visible attempt" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div></div>
-    </section>
-    <section class="table-area" data-control aria-label="Attempt history"><div class="history-tabs" role="tablist" aria-label="History view"><button type="button" id="recent-tab" role="tab" aria-selected="true" aria-controls="history-panel">Recent</button><button type="button" id="best-tab" role="tab" aria-selected="false" aria-controls="history-panel" tabindex="-1">Best</button></div>
-      <div class="table-scroll" id="history-panel" role="tabpanel" tabindex="0"><table><colgroup><col class="round-column"><col class="score-column"><col class="average-column"><col class="average-column"><col class="input-column"></colgroup><thead><tr><th scope="col">#</th><th scope="col">ms</th><th scope="col">ao5</th><th scope="col">ao12</th><th scope="col">Input</th></tr></thead><tbody id="history-rows"></tbody></table></div>
-    </section>
-    <p id="storage-note" role="status" hidden></p>
+    <div class="history-workspace" data-control aria-label="Statistics and history">
+      <section class="chart-area" aria-label="Reaction graph and history browsing">
+        <div class="chart-toolbar">
+          <div class="chart-tabs" role="tablist" aria-label="Chart view"><button type="button" id="history-view" role="tab" aria-selected="true" aria-controls="chart-panel">History</button><button type="button" id="histogram-view" role="tab" aria-selected="false" aria-controls="chart-panel" tabindex="-1">Histogram</button></div>
+          <div id="histogram-controls" hidden>
+            <div class="step-control" role="group" aria-label="Histogram bin width"><span>Step</span><div class="segmented"><button type="button" data-bin-step="5" aria-label="5 ms bins" aria-pressed="true">5</button><button type="button" data-bin-step="10" aria-label="10 ms bins" aria-pressed="false">10</button><button type="button" data-bin-step="20" aria-label="20 ms bins" aria-pressed="false">20</button></div><span>ms</span></div>
+            <div class="range-control"><span>Range</span><input id="histogram-from" type="number" min="0" step="5" aria-label="Histogram range start in milliseconds"><span>–</span><input id="histogram-to" type="number" min="5" step="5" aria-label="Histogram range end in milliseconds"><span>ms</span><button type="button" id="histogram-zoom-out" aria-label="Zoom out histogram">−</button><button type="button" id="histogram-zoom-in" aria-label="Zoom in histogram">+</button><button type="button" id="histogram-fit">All</button></div>
+          </div>
+          <button type="button" id="clear-history">Clear history</button>
+        </div>
+        <div id="history-navigation" class="history-navigation"><span id="window-label">0 rounds</span><label class="window-size-label">view <input id="window-size" type="number" inputmode="numeric" min="1" value="50" aria-label="Number of visible attempts"></label></div>
+        <div id="histogram-summary" hidden><span id="histogram-n">N = 0</span><span id="histogram-fs">FS 0</span><output id="histogram-detail" aria-live="polite"></output></div>
+        <div id="chart-panel" role="tabpanel" aria-labelledby="history-view"><div id="chart" tabindex="0" role="group" aria-label="Reaction history. Drag to browse, arrow keys to move, plus or minus to zoom."></div></div>
+        <div class="overview" id="history-overview" role="group" aria-label="History overview"><div id="overview-graph" aria-hidden="true"></div><div id="history-position" role="slider" tabindex="0" aria-label="Browse earlier or later history" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><div id="history-start" class="overview-handle" role="slider" tabindex="0" aria-label="First visible attempt" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><div id="history-end" class="overview-handle" role="slider" tabindex="0" aria-label="Last visible attempt" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div></div>
+        <div class="histogram-overview" id="histogram-overview" role="group" aria-label="Full reaction time range" hidden><div id="histogram-overview-graph" aria-hidden="true"></div><div id="histogram-position" role="slider" tabindex="0" aria-label="Histogram visible range" aria-orientation="horizontal"></div><div id="histogram-start" class="overview-handle" role="slider" tabindex="0" aria-label="Histogram range start" aria-orientation="horizontal"></div><div id="histogram-end" class="overview-handle" role="slider" tabindex="0" aria-label="Histogram range end" aria-orientation="horizontal"></div></div>
+      </section>
+      <section class="table-area" aria-label="Attempt history"><div class="history-tabs" role="tablist" aria-label="History view"><button type="button" id="recent-tab" role="tab" aria-selected="true" aria-controls="history-panel">Recent</button><button type="button" id="best-tab" role="tab" aria-selected="false" aria-controls="history-panel" tabindex="-1">Best</button></div>
+        <div class="table-scroll" id="history-panel" role="tabpanel" tabindex="0"><table><colgroup><col class="round-column"><col class="score-column"><col class="average-column"><col class="average-column"><col class="input-column"></colgroup><thead><tr><th scope="col">#</th><th scope="col">ms</th><th scope="col">ao5</th><th scope="col">ao12</th><th scope="col">Input</th></tr></thead><tbody id="history-rows"></tbody></table></div>
+      </section>
+      <p id="storage-note" role="status" hidden></p>
+    </div>
+    <dialog id="clear-history-dialog" data-control aria-labelledby="clear-history-title" aria-describedby="clear-history-description"><form method="dialog"><h2 id="clear-history-title">Clear Recent history?</h2><p id="clear-history-description">Recent attempts, graphs and current averages will be cleared. Your saved personal bests and Best top 20 will be kept.</p><div class="dialog-actions"><button type="submit" value="cancel" autofocus>Cancel</button><button type="submit" value="clear" class="confirm-clear">Clear Recent history</button></div></form></dialog>
     <p id="announcement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
   </main>
   <script>
-const MEAN_DELAY_MS = 500;
+const MEAN_DELAY_MS = 600;
+const FALSE_START_SCORE_MS = 600;
 const LIGHT_INTERVAL_MS = 600;
 
 // 53 random bits, uniformly mapped to [0, 1). Never returns 1.
@@ -258,7 +291,7 @@ class ReactionEngine {
       modeKey: `${event.device}:${edge}`,
       responseEdge: edge,
       falseStart, reactionMs,
-      scoreMs: falseStart ? 500 : reactionMs,
+      scoreMs: falseStart ? FALSE_START_SCORE_MS : reactionMs,
       recentFrameIntervalsMs: this.frameIntervals.slice(),
       medianFrameIntervalMs,
       maxFrameGapMs: this.maxFrameGapMs,
@@ -278,7 +311,7 @@ class ReactionEngine {
     this.roundInputs = new Set([event.inputId]);
     this.attempt = {
       startedAtMs: Number.isFinite(event.eventTimeMs) ? event.eventTimeMs : this.now(), startedHandlerAtMs: this.now(), preparedInput: null,
-      allLightsOnMs: null, fixedHoldMs: LIGHT_INTERVAL_MS,
+      allLightsOnMs: null, fixedHoldMs: LIGHT_INTERVAL_MS, randomMeanMs: MEAN_DELAY_MS, falseStartPenaltyMs: FALSE_START_SCORE_MS,
       scheduledRandomWaitStartMs: null, sampledDelayMs: null,
       scheduledOffMs: null, softwareOnsetMs: null,
     };
@@ -365,7 +398,7 @@ const RECENT_LIMIT = 1000;
 const BEST_LIMIT = 20;
 
 // Each aoN drops exactly one fastest and one slowest score. Penalties remain
-// numeric 500 ms scores; slow successful reactions are never clipped.
+// their stored numeric scores; slow successful reactions are never clipped.
 function rollingAverage(records, endIndex, size) {
   if (!Number.isInteger(size) || size < 3) throw new RangeError('Average size must be at least three');
   if (endIndex < size - 1 || endIndex >= records.length) return null;
@@ -412,6 +445,7 @@ function personalBests(records) {
 const emptyBests = () => ({ single: null, ao5: null, ao12: null });
 const valid = record => record && Number.isFinite(record.scoreMs) && record.scoreMs >= 0 && typeof record.falseStart === 'boolean' && (record.falseStart ? record.reactionMs === null : Number.isFinite(record.reactionMs) && record.reactionMs >= 0);
 const average = value => Number.isFinite(value) && value >= 0 ? value : null;
+const cutoff = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
 function compact(record) {
   const { trialFrameIntervalsMs, recentFrameIntervalsMs, ...stored } = record;
   return stored;
@@ -431,7 +465,10 @@ function mergeStoredBests(previous, record) {
   return best;
 }
 function emptyHistory() {
-  return { records: [], bestRecords: [], lifetimeBests: emptyBests(), totalAttempts: 0, rollingScores: [], latest: null, pendingRecent: [] };
+  return { records: [], bestRecords: [], lifetimeBests: emptyBests(), totalAttempts: 0, rollingScores: [], latest: null, pendingRecent: [], recentClearedThrough: 0 };
+}
+function clearRecentHistory(state) {
+  return { ...state, records: [], rollingScores: [], latest: null, pendingRecent: [], recentClearedThrough: state.totalAttempts };
 }
 function appendHistory(state, input) {
   if (!valid(input)) throw new TypeError('Invalid reaction record');
@@ -446,6 +483,7 @@ function appendHistory(state, input) {
     records: [...state.records, record].slice(-RECENT_LIMIT), bestRecords, lifetimeBests,
     totalAttempts: record.round, rollingScores: [...state.rollingScores, record.scoreMs].slice(-11), latest: compact(record),
     pendingRecent: [...(state.pendingRecent || []), compact(record)].slice(-RECENT_LIMIT),
+    recentClearedThrough: cutoff(state.recentClearedThrough),
   };
 }
 function restoreHistory(recentSaved, bestSaved = null) {
@@ -463,7 +501,7 @@ function restoreHistory(recentSaved, bestSaved = null) {
         const values = [average(migrated.lifetimeBests[key]), average(supplied.lifetimeBests?.[key])].filter(value => value !== null);
         lifetimeBests[key] = values.length ? Math.min(...values) : null;
       }
-      bestSaved = { ...newer, version: 1, bestRecords: topRecords([...migrated.bestRecords, ...(Array.isArray(supplied.bestRecords) ? supplied.bestRecords : [])]), lifetimeBests };
+      bestSaved = { ...newer, version: 1, recentClearedThrough: Math.max(cutoff(migrated.recentClearedThrough), cutoff(supplied.recentClearedThrough)), bestRecords: topRecords([...migrated.bestRecords, ...(Array.isArray(supplied.bestRecords) ? supplied.bestRecords : [])]), lifetimeBests };
     } else bestSaved = migrated;
     recentSaved = recentSnapshot(state);
   }
@@ -471,16 +509,17 @@ function restoreHistory(recentSaved, bestSaved = null) {
   const retained = values => (Array.isArray(values) ? values : []).filter(valid).filter(record => Number.isSafeInteger(record.round) && record.round > 0).map(normalize);
   const savedRecords = retained(recentSaved.records).slice(-RECENT_LIMIT);
   const ledger = bestSaved?.version === 1 ? bestSaved : {};
+  const recentClearedThrough = Math.max(cutoff(recentSaved.recentClearedThrough), cutoff(ledger.recentClearedThrough));
   const retainedBest = retained(ledger.bestRecords);
   const pending = retained(ledger.pendingRecent).slice(-RECENT_LIMIT);
   const ledgerLatest = retained([ledger.latest]).find(record => record.round === ledger.totalAttempts) || null;
-  let totalAttempts = Math.max(0, Number.isSafeInteger(recentSaved.totalAttempts) ? recentSaved.totalAttempts : 0, Number.isSafeInteger(ledger.totalAttempts) ? ledger.totalAttempts : 0);
+  let totalAttempts = Math.max(recentClearedThrough, Number.isSafeInteger(recentSaved.totalAttempts) ? recentSaved.totalAttempts : 0, Number.isSafeInteger(ledger.totalAttempts) ? ledger.totalAttempts : 0);
   for (const record of [...savedRecords, ...retainedBest, ...pending]) totalAttempts = Math.max(totalAttempts, record.round);
   // Recover only real retained records, keeping their original round/average
   // metadata. Prefer the full recent copy over a compact recovery duplicate.
   const recovered = new Map();
   for (const record of [...retainedBest, ...pending, ...(ledgerLatest ? [ledgerLatest] : []), ...savedRecords]) {
-    if (record.round > totalAttempts - RECENT_LIMIT) recovered.set(record.round, record);
+    if (record.round > Math.max(recentClearedThrough, totalAttempts - RECENT_LIMIT)) recovered.set(record.round, record);
   }
   const records = [...recovered.values()].sort((a, b) => a.round - b.round).slice(-RECENT_LIMIT);
   const savedRounds = new Set(savedRecords.map(record => record.round));
@@ -489,22 +528,24 @@ function restoreHistory(recentSaved, bestSaved = null) {
   let lifetimeBests = emptyBests();
   for (const key of ['single', 'ao5', 'ao12']) lifetimeBests[key] = average(ledger.lifetimeBests?.[key]);
   for (const record of [...records, ...bestRecords]) lifetimeBests = mergeStoredBests(lifetimeBests, record);
-  const latest = ledgerLatest?.round === totalAttempts ? ledgerLatest : records[records.length - 1] || null;
-  const tail = (Array.isArray(ledger.rollingScores) ? ledger.rollingScores : []).filter(score => Number.isFinite(score) && score >= 0).slice(-11);
+  const latest = ledgerLatest?.round === totalAttempts && ledgerLatest.round > recentClearedThrough ? ledgerLatest : records[records.length - 1] || null;
+  const tailLength = Math.min(11, totalAttempts - recentClearedThrough);
+  const tail = tailLength ? (Array.isArray(ledger.rollingScores) ? ledger.rollingScores : []).filter(score => Number.isFinite(score) && score >= 0).slice(-tailLength) : [];
   const contiguousTail = [];
   for (let i = records.length - 1, round = totalAttempts; i >= 0 && contiguousTail.length < 11 && records[i].round === round; i--, round--) contiguousTail.unshift(records[i].scoreMs);
-  const rollingScores = ledger.totalAttempts === totalAttempts && tail.length ? tail : contiguousTail;
-  return { records, bestRecords, lifetimeBests, totalAttempts, rollingScores, latest, pendingRecent };
+  const rollingScores = ledger.totalAttempts === totalAttempts && cutoff(ledger.recentClearedThrough) === recentClearedThrough && tail.length ? tail : contiguousTail;
+  return { records, bestRecords, lifetimeBests, totalAttempts, rollingScores, latest, pendingRecent, recentClearedThrough };
 }
 function missingRecentCount(state) {
-  const retained = state.records.filter(record => record.round > state.totalAttempts - RECENT_LIMIT).length;
-  return Math.max(0, Math.min(state.totalAttempts, RECENT_LIMIT) - retained);
+  const cleared = cutoff(state.recentClearedThrough);
+  const retained = state.records.filter(record => record.round > Math.max(cleared, state.totalAttempts - RECENT_LIMIT)).length;
+  return Math.max(0, Math.min(state.totalAttempts - cleared, RECENT_LIMIT) - retained);
 }
-function recentSnapshot(state, tableTab = 'recent') {
-  return { version: 3, records: state.records, totalAttempts: state.totalAttempts, tableTab };
+function recentSnapshot(state, tableTab = 'recent', chart = null) {
+  return { version: 3, records: state.records, totalAttempts: state.totalAttempts, recentClearedThrough: cutoff(state.recentClearedThrough), tableTab, ...(chart ? { chart } : {}) };
 }
 function bestSnapshot(state) {
-  return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest, pendingRecent: state.pendingRecent || [] };
+  return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest, pendingRecent: state.pendingRecent || [], recentClearedThrough: cutoff(state.recentClearedThrough) };
 }
 
 const keyAliases = { Spacebar: ' ', Esc: 'Escape', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Del: 'Delete', OS: 'Meta' };
@@ -696,6 +737,65 @@ function bindInputs({ engine, surface, eventData, onStart = () => {}, diagnostic
   window.addEventListener('pagehide', () => cancel('Page closed', true));
 }
 
+const HISTOGRAM_STEPS = [5, 10, 20];
+
+function histogramDomain(records, step = 5) {
+  if (!HISTOGRAM_STEPS.includes(step)) throw new RangeError('Histogram step must be 5, 10 or 20 ms');
+  const values = records.filter(record => !record.falseStart && Number.isFinite(record.reactionMs) && record.reactionMs >= 0).map(record => record.reactionMs);
+  if (!values.length) return { from: 0, to: 500, values, falseStarts: records.filter(record => record.falseStart).length };
+  let min = Infinity, max = 0;
+  for (const value of values) { min = Math.min(min, value); max = Math.max(max, value); }
+  let from = Math.floor(min / step) * step, to = (Math.floor(max / step) + 1) * step;
+  // Keep a single/equal-valued sample honest: one narrow occupied bin, with
+  // empty neighbouring intervals rather than a full-width fabricated peak.
+  const padding = Math.max(0, Math.ceil(200 / step) - Math.round((to - from) / step));
+  from = Math.max(0, from - Math.floor(padding / 2) * step);
+  to = Math.max(to, from + Math.ceil(200 / step) * step);
+  return { from, to, values, falseStarts: records.filter(record => record.falseStart).length };
+}
+
+function histogramRange(domain, step, requested = null) {
+  if (!requested || requested.auto) return { from: domain.from, to: domain.to, auto: true };
+  const first = Number(requested.from), last = Number(requested.to);
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return { from: domain.from, to: domain.to, auto: true };
+  let from = Math.floor(Math.min(first, last) / step) * step;
+  let to = Math.ceil(Math.max(first, last) / step) * step;
+  from = Math.max(domain.from, Math.min(domain.to - step, from));
+  to = Math.min(domain.to, Math.max(from + step, to));
+  return { from, to, auto: false };
+}
+
+function moveHistogramRange(domain, step, range, delta) {
+  const width = Math.min(domain.to - domain.from, range.to - range.from);
+  const from = Math.max(domain.from, Math.min(domain.to - width, range.from + Math.round(delta / step) * step));
+  return { from, to: from + width, auto: false };
+}
+
+function zoomHistogramRange(domain, step, range, factor) {
+  if (!Number.isFinite(factor) || factor <= 0) throw new RangeError('Invalid histogram zoom');
+  const bins = Math.max(1, Math.min(Math.round((domain.to - domain.from) / step), Math.round((range.to - range.from) / step * factor)));
+  const width = bins * step, middle = (range.from + range.to) / 2;
+  const from = Math.max(domain.from, Math.min(domain.to - width, Math.round((middle - width / 2) / step) * step));
+  return { from, to: from + width, auto: false };
+}
+
+function histogramData(records, step = 5, requested = null) {
+  const domain = histogramDomain(records, step), range = histogramRange(domain, step, requested);
+  const counts = new Map(); let below = 0, above = 0;
+  for (const value of domain.values) {
+    if (value < range.from) { below++; continue; }
+    if (value >= range.to) { above++; continue; }
+    const index = Math.floor(value / step);
+    counts.set(index, (counts.get(index) || 0) + 1);
+  }
+  const first = Math.round(range.from / step), binCount = Math.round((range.to - range.from) / step);
+  // Extremely slow valid reactions may leave huge empty gaps. Keep those gaps
+  // in the coordinate domain without allocating millions of empty objects.
+  const indices = binCount <= 2000 ? Array.from({ length: binCount }, (_, index) => first + index) : [...counts.keys()].sort((a, b) => a - b);
+  const bins = indices.map(index => ({ from: index * step, to: (index + 1) * step, count: counts.get(index) || 0 }));
+  return { ...range, step, domainFrom: domain.from, domainTo: domain.to, binCount, bins, N: domain.values.length, shown: domain.values.length - below - above, below, above, falseStarts: domain.falseStarts };
+}
+
 // Opt-in, page-local investigation. Never stores or sends a trace automatically.
 function createInputTrace(enabled) {
   if (!enabled) return null;
@@ -711,7 +811,7 @@ function createInputTrace(enabled) {
       state: engine.state, lights: engine.lights, generation: engine.generation,
       held: [...engine.held].map(([id, device]) => ({ id, device, since: engine.heldSince.get(id) })),
       roundInputs: [...engine.roundInputs], releaseIds: [...engine.releaseIds],
-      attempt: attempt && Object.fromEntries(['startedAtMs','startedHandlerAtMs','allLightsOnMs','fixedHoldMs','sampledDelayMs','scheduledRandomWaitStartMs','scheduledOffMs','softwareOnsetMs','onsetFrameTimestampMs'].map(key => [key, attempt[key] ?? null])),
+      attempt: attempt && Object.fromEntries(['startedAtMs','startedHandlerAtMs','allLightsOnMs','fixedHoldMs','randomMeanMs','falseStartPenaltyMs','sampledDelayMs','scheduledRandomWaitStartMs','scheduledOffMs','softwareOnsetMs','onsetFrameTimestampMs'].map(key => [key, attempt[key] ?? null])),
       cancelReason: engine.state === 'cancelled' ? engine.cancelReason : null,
     };
   }
@@ -775,7 +875,7 @@ function createInputTrace(enabled) {
     },
     result(record) {
       if (!running) return;
-      const result = { ...inputFields(record), ...Object.fromEntries(['startedAtMs','allLightsOnMs','fixedHoldMs','sampledDelayMs','scheduledRandomWaitStartMs','scheduledOffMs','softwareOnsetMs','responseEdge','modeKey','falseStart','reactionMs','scoreMs','maxTrialFrameGapMs'].map(key => [key, record[key] ?? null])) };
+      const result = { ...inputFields(record), ...Object.fromEntries(['startedAtMs','allLightsOnMs','fixedHoldMs','randomMeanMs','falseStartPenaltyMs','sampledDelayMs','scheduledRandomWaitStartMs','scheduledOffMs','softwareOnsetMs','responseEdge','modeKey','falseStart','reactionMs','scoreMs','maxTrialFrameGapMs'].map(key => [key, record[key] ?? null])) };
       const entry = note('engine:result', { inputCall, reason: record.falseStart ? record.softwareOnsetMs === null ? 'input-before-software-onset' : 'event-timestamp-before-software-onset' : 'response-after-software-onset', result, state: snapshot() });
       if (record.falseStart) {
         falseStarts += 1;
@@ -824,6 +924,10 @@ try { bestSaved = JSON.parse(localStorage.getItem(bestStorageKey) || 'null'); } 
 let history = restoreHistory(recentSaved, bestSaved);
 let records = history.records, best = history.lifetimeBests, lastRecord = history.latest, renderedLights = -1;
 let tableTab = recentSaved?.tableTab === 'best' ? 'best' : 'recent';
+let chartView = recentSaved?.chart?.view === 'histogram' ? 'histogram' : 'history';
+let histogramStep = [5, 10, 20].includes(recentSaved?.chart?.step) ? recentSaved.chart.step : 5;
+let histogramSelection = recentSaved?.chart?.range || { auto: true };
+let currentHistogram = null;
 recentSaved = bestSaved = null; // release any large legacy snapshot after bounded migration
 let viewport = historyWindow(records.length), followLatest = true;
 let lastFrameHandledAt = performance.now();
@@ -846,12 +950,12 @@ const engine = new ReactionEngine({
   },
 });
 inputTrace?.attach(engine);
-function save() {
-  let bestSaved = false, recentSaved = false;
+function save(bestAlreadySaved = false) {
+  let bestSaved = bestAlreadySaved, recentSaved = false;
   // Save pending results with the independent ledger before the recent buffer.
   // Clear the in-memory retry queue only after that buffer is safely written.
-  try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(history))); bestSaved = true; } catch {}
-  try { localStorage.setItem(storageKey, JSON.stringify(recentSnapshot(history, tableTab))); recentSaved = true; } catch {}
+  if (!bestSaved) try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(history))); bestSaved = true; } catch {}
+  try { localStorage.setItem(storageKey, JSON.stringify(recentSnapshot(history, tableTab, { view: chartView, step: histogramStep, range: histogramSelection }))); recentSaved = true; } catch {}
   if (recentSaved) history = { ...history, pendingRecent: [] };
   storageAvailable = bestSaved && recentSaved;
   const missing = missingRecentCount(history);
@@ -892,10 +996,10 @@ function node(tag, attributes = {}, text) {
   if (text !== undefined) el.textContent = text;
   return el;
 }
-function renderChart(rows) {
-  const width = Math.max(280, $('#chart').clientWidth), height = width > 760 ? 250 : 255;
+function renderTimeline(rows) {
+  const width = Math.max(280, $('#chart').clientWidth), height = width > 760 ? 180 : 190;
   const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': rows.length ? `Reaction scores for rounds ${rows[0].round} to ${rows[rows.length - 1].round}` : 'Empty reaction history' });
-  const left = 61, right = width - 10, top = 15, bottom = height - 49;
+  const left = 48, right = width - 12, top = 12, bottom = height - 39;
   let largest = 0; for (const row of rows) largest = Math.max(largest, row.record.scoreMs);
   const maximum = Math.max(600, Math.ceil(largest / 100 + 1) * 100);
   const y = score => bottom - score / maximum * (bottom - top);
@@ -903,7 +1007,7 @@ function renderChart(rows) {
   for (let i = 0; i <= 6; i++) {
     const value = maximum / 6 * i, yy = y(value);
     svg.append(node('line', { x1: left, x2: right, y1: yy, y2: yy, stroke: '#343434', 'stroke-width': 1 }));
-    svg.append(node('text', { x: left - 10, y: yy + 5, 'text-anchor': 'end', fill: '#ddd', 'font-size': 16 }, `${Math.round(value)}${i === 6 ? ' ms' : ''}`));
+    svg.append(node('text', { x: left - 10, y: yy + 5, 'text-anchor': 'end', fill: '#ddd', 'font-size': 11 }, `${Math.round(value)}${i === 6 ? ' ms' : ''}`));
   }
   const labelWidth = Math.max(38, ...rows.map(row => String(row.round).length * 9 + 12));
   const tickCount = Math.min(rows.length, 7, Math.max(2, Math.floor((right - left) / labelWidth) + 1));
@@ -911,15 +1015,113 @@ function renderChart(rows) {
   rows.forEach((row, i) => {
     if (!tickIndices.has(i)) return;
     svg.append(node('line', { x1: x(i), x2: x(i), y1: top, y2: bottom + 10, stroke: '#343434', 'stroke-width': 1 }));
-    svg.append(node('text', { x: x(i), y: bottom + 31, 'text-anchor': 'middle', fill: '#ddd', 'font-size': 16 }, row.round));
+    svg.append(node('text', { x: x(i), y: bottom + 22, 'text-anchor': 'middle', fill: '#ddd', 'font-size': 11 }, row.round));
   });
   if (rows.length) {
     svg.append(node('polyline', { points: rows.map((row, i) => `${x(i)},${y(row.record.scoreMs)}`).join(' '), fill: 'none', stroke: '#eee', 'stroke-width': 1.7 }));
     rows.forEach((row, i) => svg.append(node('circle', { cx: x(i), cy: y(row.record.scoreMs), r: rows.length > 100 ? 2 : 4.5, fill: row.record.falseStart ? '#ff0026' : '#eee' })));
   }
-  svg.append(node('text', { x: (left + right) / 2, y: height - 2, 'text-anchor': 'middle', fill: '#ddd', 'font-size': 15 }, 'Round'));
+  svg.append(node('text', { x: (left + right) / 2, y: height - 2, 'text-anchor': 'middle', fill: '#ddd', 'font-size': 12 }, 'Round'));
   $('#chart').replaceChildren(svg);
 }
+function renderChart(rows) {
+  const histogram = chartView === 'histogram';
+  $('#history-navigation').hidden = histogram;
+  $('#history-overview').hidden = histogram;
+  $('#histogram-controls').hidden = !histogram;
+  $('#histogram-summary').hidden = !histogram;
+  $('#histogram-overview').hidden = !histogram;
+  $('#chart-panel').setAttribute('aria-labelledby', histogram ? 'histogram-view' : 'history-view');
+  for (const [id, selected] of [['history-view', !histogram], ['histogram-view', histogram]]) {
+    const button = $('#' + id); button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
+  }
+  $('#chart').setAttribute('aria-label', histogram ? 'Reaction time histogram. Drag or use arrow keys to pan, plus or minus to zoom.' : 'Reaction history. Drag to browse, arrow keys to move, plus or minus to zoom.');
+  if (histogram) renderHistogram(); else renderTimeline(rows);
+}
+function renderHistogram() {
+  const data = histogramData(records, histogramStep, histogramSelection); currentHistogram = data;
+  histogramSelection = { from: data.from, to: data.to, auto: data.auto };
+  const width = Math.max(280, $('#chart').clientWidth), height = width > 760 ? 180 : 190;
+  const left = 48, right = width - 12, top = 12, bottom = height - 39;
+  const x = value => left + (value - data.from) / (data.to - data.from) * (right - left);
+  const peak = Math.max(1, ...data.bins.map(bin => bin.count));
+  const countMagnitude = 10 ** Math.floor(Math.log10(Math.max(1, peak / 3)));
+  const countStep = [1, 2, 5, 10].map(n => n * countMagnitude).find(n => n >= peak / 3) || 1;
+  const maximum = Math.ceil(peak / countStep) * countStep;
+  const y = count => bottom - count / maximum * (bottom - top);
+  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': `Histogram: ${data.N} successful Recent reactions, ${data.falseStarts} false starts counted separately. ${data.shown} reactions from ${data.from} to less than ${data.to} milliseconds; ${data.step} millisecond intervals.` });
+  for (let count = 0; count <= maximum; count += countStep) {
+    svg.append(node('line', { x1: left, x2: right, y1: y(count), y2: y(count), stroke: '#292929', 'stroke-width': 1 }));
+    svg.append(node('text', { x: left - 9, y: y(count) + 4, 'text-anchor': 'end', fill: '#aaa', 'font-size': 11 }, count));
+  }
+  const digits = Math.max(String(data.from).length, String(data.to).length), tickCount = Math.max(2, Math.min(9, Math.floor((right - left) / Math.max(47, digits * 7 + 14)) + 1));
+  const ticks = [...new Set(Array.from({ length: tickCount }, (_, index) => data.from + Math.round(index * data.binCount / (tickCount - 1)) * data.step))];
+  for (let index = 0; index < ticks.length; index++) {
+    const value = ticks[index];
+    svg.append(node('line', { x1: x(value), x2: x(value), y1: top, y2: bottom + 5, stroke: '#292929', 'stroke-width': 1 }));
+    svg.append(node('text', { x: x(value), y: bottom + 20, 'text-anchor': index === 0 ? 'start' : index === ticks.length - 1 ? 'end' : 'middle', fill: '#aaa', 'font-size': 11 }, value));
+  }
+  for (const bin of data.bins) if (bin.count) {
+    const rect = node('rect', { x: x(bin.from) + .3, y: y(bin.count), width: Math.max(.65, (right - left) / data.binCount - .6), height: bottom - y(bin.count), fill: bin.count === peak ? '#00dce6' : '#888', 'data-bin-from': bin.from, 'data-bin-to': bin.to, 'data-count': bin.count });
+    rect.append(node('title', {}, `${bin.from}–<${bin.to} ms · ${bin.count} ${bin.count === 1 ? 'attempt' : 'attempts'}`)); svg.append(rect);
+  }
+  if (!data.N) svg.append(node('text', { x: (left + right) / 2, y: (top + bottom) / 2, 'text-anchor': 'middle', fill: '#777', 'font-size': 12 }, records.length ? 'No successful reactions' : 'No recent attempts'));
+  else if (!data.shown) svg.append(node('text', { x: (left + right) / 2, y: (top + bottom) / 2, 'text-anchor': 'middle', fill: '#777', 'font-size': 12 }, 'No reactions in this range'));
+  svg.append(node('text', { x: (left + right) / 2, y: height - 1, 'text-anchor': 'middle', fill: '#aaa', 'font-size': 11 }, 'Reaction time (ms)'));
+  svg.append(node('text', { x: 12, y: (top + bottom) / 2, transform: `rotate(-90 12 ${(top + bottom) / 2})`, 'text-anchor': 'middle', fill: '#aaa', 'font-size': 11 }, 'Count'));
+  $('#chart').replaceChildren(svg);
+  $('#histogram-n').textContent = `N = ${data.N}`; $('#histogram-n').title = 'Successful reactions in retained Recent history';
+  $('#histogram-fs').textContent = `FS ${data.falseStarts}`; $('#histogram-fs').title = 'False starts, excluded from histogram bins';
+  $('#histogram-detail').textContent = data.below || data.above ? `${data.shown} shown · ${data.below} below · ${data.above} above` : `${data.step} ms bins · ${data.shown} shown`;
+  for (const [id, value] of [['histogram-from', data.from], ['histogram-to', data.to]]) {
+    const input = $('#' + id); input.value = value; input.step = data.step; input.min = data.domainFrom; input.max = data.domainTo; input.disabled = !data.N;
+  }
+  for (const button of document.querySelectorAll('[data-bin-step]')) button.setAttribute('aria-pressed', String(Number(button.dataset.binStep) === histogramStep));
+  $('#histogram-zoom-in').disabled = !data.N || data.binCount <= 1;
+  $('#histogram-zoom-out').disabled = !data.N || data.to - data.from >= data.domainTo - data.domainFrom;
+  $('#histogram-fit').disabled = !data.N;
+  renderHistogramOverview(data);
+}
+function renderHistogramOverview(data) {
+  $('#histogram-overview').hidden = !data.N;
+  const full = histogramData(records, histogramStep), width = 1000, height = 23, maximum = Math.max(1, ...full.bins.map(bin => bin.count));
+  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'none' });
+  for (const bin of full.bins) if (bin.count) svg.append(node('rect', { x: (bin.from - full.from) / (full.to - full.from) * width, y: height - bin.count / maximum * 20, width: Math.max(.7, width / full.binCount - .4), height: bin.count / maximum * 20, fill: '#777' }));
+  $('#histogram-overview-graph').replaceChildren(svg);
+  const start = $('#histogram-start'), end = $('#histogram-end'), position = $('#histogram-position'), span = data.domainTo - data.domainFrom;
+  position.style.left = start.style.left = `${(data.from - data.domainFrom) / span * 100}%`;
+  position.style.width = `${(data.to - data.from) / span * 100}%`; end.style.left = `${(data.to - data.domainFrom) / span * 100}%`;
+  for (const [element, value, min, max, disabled] of [[start, data.from, data.domainFrom, data.to - data.step, !data.N], [end, data.to, data.from + data.step, data.domainTo, !data.N], [position, data.from, data.domainFrom, data.domainTo - (data.to - data.from), !data.N || data.to - data.from >= span]]) {
+    element.setAttribute('aria-valuenow', value); element.setAttribute('aria-valuemin', min); element.setAttribute('aria-valuemax', max); element.setAttribute('aria-disabled', String(disabled)); element.tabIndex = disabled ? -1 : 0;
+  }
+  position.setAttribute('aria-valuetext', `${data.from} to ${data.to} milliseconds`);
+}
+function histogramContext() {
+  const domain = histogramDomain(records, histogramStep);
+  return { domain, range: histogramRange(domain, histogramStep, histogramSelection) };
+}
+function setHistogramSelection(selection, persist = true) {
+  histogramSelection = selection; renderChart(tableRows(records, viewport)); if (persist) save();
+}
+function panHistogram(delta) {
+  const { domain, range } = histogramContext(); setHistogramSelection(moveHistogramRange(domain, histogramStep, range, delta));
+}
+function zoomHistogram(factor) {
+  const { domain, range } = histogramContext(); setHistogramSelection(zoomHistogramRange(domain, histogramStep, range, factor));
+}
+function histogramKey(event) {
+  const { domain, range } = histogramContext();
+  const actions = { ArrowLeft: () => panHistogram(-histogramStep * 5), ArrowRight: () => panHistogram(histogramStep * 5), '+': () => zoomHistogram(.5), '=': () => zoomHistogram(.5), '-': () => zoomHistogram(2), Home: () => setHistogramSelection(moveHistogramRange(domain, histogramStep, range, domain.from - range.from)), End: () => setHistogramSelection(moveHistogramRange(domain, histogramStep, range, domain.to - range.to)) };
+  if (actions[event.key]) { event.preventDefault(); actions[event.key](); }
+}
+function inspectHistogram(clientX) {
+  if (chartView !== 'histogram' || !currentHistogram?.N) return;
+  const rect = $('#chart').getBoundingClientRect(), width = Math.max(280, rect.width), left = 48, right = width - 12, data = currentHistogram;
+  const value = data.from + Math.max(0, Math.min(.999999999, (clientX - rect.left - left) / (right - left))) * (data.to - data.from);
+  const from = Math.floor(value / data.step) * data.step, count = data.bins.find(bin => bin.from === from)?.count || 0;
+  $('#histogram-detail').textContent = `${from}–<${from + data.step} ms · ${count} ${count === 1 ? 'attempt' : 'attempts'}`;
+}
+
 function renderOverview() {
   const width = 1000, height = 30, svg = node('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'none' });
   let maximum = 600; for (const record of records) maximum = Math.max(maximum, record.scoreMs);
@@ -974,7 +1176,8 @@ function renderHistory() {
     body.append(tr);
   }
   renderChart(chartRows);
-  $('#window-label').textContent = chartRows.length ? `${followLatest ? 'Last ' + chartRows.length + ' attempts' : chartRows[0].round + '–' + chartRows[chartRows.length - 1].round} · ${history.totalAttempts} total` : 'No recent attempts';
+  $('#window-label').textContent = chartRows.length ? `${followLatest ? 'Last ' + chartRows.length + ' attempts' : chartRows[0].round + '–' + chartRows[chartRows.length - 1].round} · ${history.totalAttempts - history.recentClearedThrough} ${history.recentClearedThrough ? 'since clear' : 'total'}` : 'No recent attempts';
+  $('#clear-history').disabled = history.totalAttempts <= history.recentClearedThrough;
   $('#window-size').value = viewport.count;
   $('#window-size').max = Math.min(RECENT_LIMIT, Math.max(records.length, 50));
   renderOverview();
@@ -984,6 +1187,108 @@ function browse(end, count = viewport.count) {
   viewport = historyWindow(records.length, next.count, Math.max(Math.min(next.count, records.length), next.end));
   followLatest = viewport.end === records.length; renderHistory();
 }
+for (const [id, view] of [['history-view', 'history'], ['histogram-view', 'histogram']]) {
+  const button = $('#' + id);
+  const choose = () => { if (engine.active) return; chartView = view; renderHistory(); save(); };
+  button.addEventListener('click', choose);
+  button.addEventListener('keydown', event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault(); chartView = chartView === 'history' ? 'histogram' : 'history'; renderHistory(); save(); $('#' + (chartView === 'history' ? 'history-view' : 'histogram-view')).focus();
+  });
+}
+for (const button of document.querySelectorAll('[data-bin-step]')) button.addEventListener('click', () => {
+  if (engine.active) return; histogramStep = Number(button.dataset.binStep); setHistogramSelection(histogramSelection);
+});
+for (const id of ['histogram-from', 'histogram-to']) $('#' + id).addEventListener('change', () => {
+  if (engine.active) return; setHistogramSelection({ from: Number($('#histogram-from').value), to: Number($('#histogram-to').value), auto: false });
+});
+$('#histogram-zoom-in').addEventListener('click', () => zoomHistogram(.5));
+$('#histogram-zoom-out').addEventListener('click', () => zoomHistogram(2));
+$('#histogram-fit').addEventListener('click', () => setHistogramSelection({ auto: true }));
+for (const id of ['histogram-start', 'histogram-end', 'histogram-position']) $('#' + id).addEventListener('keydown', event => {
+  if (event.ctrlKey || event.metaKey || event.altKey || !records.length) return;
+  const step = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10 }[event.key];
+  if (step === undefined && !['Home', 'End'].includes(event.key)) return;
+  event.preventDefault(); const { domain, range } = histogramContext();
+  if (id === 'histogram-position') {
+    const delta = event.key === 'Home' ? domain.from - range.from : event.key === 'End' ? domain.to - range.to : step * histogramStep;
+    setHistogramSelection(moveHistogramRange(domain, histogramStep, range, delta));
+  } else {
+    const start = id === 'histogram-start', value = start ? range.from : range.to;
+    const min = start ? domain.from : range.from + histogramStep, max = start ? range.to - histogramStep : domain.to;
+    const next = Math.max(min, Math.min(max, event.key === 'Home' ? min : event.key === 'End' ? max : value + step * histogramStep));
+    setHistogramSelection({ from: start ? next : range.from, to: start ? range.to : next, auto: false });
+  }
+});
+const clearDialog = $('#clear-history-dialog');
+$('#clear-history').addEventListener('click', () => {
+  if (engine.active || history.totalAttempts <= history.recentClearedThrough) return;
+  clearDialog.returnValue = ''; clearDialog.showModal();
+});
+function clearConfirmedRecent() {
+  if (engine.active) return;
+  const cleared = clearRecentHistory(history);
+  // Secure the independent best ledger and the clear boundary before replacing
+  // Recent. If this write fails, leave all existing in-memory/Recent data intact.
+  try { localStorage.setItem(bestStorageKey, JSON.stringify(bestSnapshot(cleared))); }
+  catch {
+    $('#storage-note').hidden = false;
+    $('#storage-note').textContent = 'History could not be cleared because saved records could not be secured. Nothing was cleared.';
+    return;
+  }
+  history = cleared; records = history.records; best = history.lifetimeBests; lastRecord = null;
+  tableTab = 'recent'; viewport = historyWindow(0, viewport.count); followLatest = true; histogramSelection = { auto: true };
+  engine.stopScheduled(); engine.clearHeld(); engine.state = 'idle'; engine.lights = 0; engine.attempt = null;
+  save(true); renderHistory(); renderState();
+  $('.table-scroll').scrollTop = 0; $('.history-workspace').scrollTop = 0;
+  $('#announcement').textContent = 'Recent history cleared. Saved personal bests and Best top 20 kept.';
+}
+clearDialog.querySelector('form').addEventListener('submit', event => {
+  event.preventDefault();
+  const value = event.submitter?.value || 'cancel';
+  if (value === 'clear') clearConfirmedRecent();
+  clearDialog.close(value);
+});
+function bindHistogramDrag(target, overview = false) {
+  let drag = null;
+  target.addEventListener('pointerdown', event => {
+    if (chartView !== 'histogram' || event.button !== 0 || !event.isPrimary || !currentHistogram?.N) return;
+    const { domain, range } = histogramContext(), rect = target.getBoundingClientRect();
+    const mode = overview && event.target.closest('.overview-handle') ? event.target.closest('.overview-handle').id === 'histogram-start' ? 'start' : 'end' : 'pan';
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, axis: null, mode, domain, range, rect, track: overview && (event.target === target || Boolean(event.target.closest('#histogram-overview-graph'))) };
+    target.setPointerCapture(event.pointerId);
+  });
+  target.addEventListener('pointermove', event => {
+    if (!drag || event.pointerId !== drag.id) { if (!overview) inspectHistogram(event.clientX); return; }
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (!drag.axis) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      drag.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (drag.axis !== 'x') return;
+    event.preventDefault();
+    const { domain, range, mode } = drag, span = overview ? domain.to - domain.from : range.to - range.from;
+    const offset = Math.round(dx / drag.rect.width * span / histogramStep) * histogramStep;
+    let next;
+    if (mode === 'start') next = { from: Math.max(domain.from, Math.min(range.to - histogramStep, range.from + offset)), to: range.to, auto: false };
+    else if (mode === 'end') next = { from: range.from, to: Math.min(domain.to, Math.max(range.from + histogramStep, range.to + offset)), auto: false };
+    else next = moveHistogramRange(domain, histogramStep, range, overview ? offset : -offset);
+    setHistogramSelection(next, false);
+  }, { passive: false });
+  target.addEventListener('pointerup', event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    if (drag.axis === 'x') save();
+    else if (!drag.axis && drag.track) {
+      const middle = drag.domain.from + (event.clientX - drag.rect.left) / drag.rect.width * (drag.domain.to - drag.domain.from);
+      setHistogramSelection(moveHistogramRange(drag.domain, histogramStep, drag.range, middle - (drag.range.from + drag.range.to) / 2));
+    } else if (!drag.axis && !overview) inspectHistogram(event.clientX);
+    drag = null;
+  });
+  for (const type of ['pointercancel', 'lostpointercapture']) target.addEventListener(type, event => { if (drag?.id === event.pointerId) drag = null; });
+}
+bindHistogramDrag($('#chart'));
+bindHistogramDrag($('#histogram-overview'), true);
+
 for (const [id, value] of [['recent-tab', 'recent'], ['best-tab', 'best']]) {
   const tab = $(`#${id}`);
   tab.addEventListener('click', () => { tableTab = value; save(); renderHistory(); });
@@ -1008,17 +1313,23 @@ for (const id of ['history-position', 'history-start', 'history-end']) $(`#${id}
 });
 $('#chart').addEventListener('keydown', event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (chartView === 'histogram') { histogramKey(event); return; }
   const actions = { ArrowLeft: () => browse(Math.max(viewport.count, viewport.end - 1)), ArrowRight: () => browse(viewport.end + 1), Home: () => browse(Math.min(viewport.count, records.length)), End: () => browse(records.length), '+': () => browse(viewport.end, viewport.count / 1.4), '=': () => browse(viewport.end, viewport.count / 1.4), '-': () => browse(viewport.end, viewport.count * 1.4) };
   if (actions[event.key]) { event.preventDefault(); actions[event.key](); }
 });
 $('#chart').addEventListener('wheel', event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (chartView === 'histogram') {
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey) { event.preventDefault(); panHistogram((event.deltaX || event.deltaY) / 4 * histogramStep); }
+    return;
+  }
   event.preventDefault(); browse(Math.max(Math.min(viewport.count, records.length), viewport.end + Math.sign(event.deltaY || event.deltaX) * Math.max(1, Math.round(viewport.count / 10))));
 }, { passive: false });
 function bindHistoryDrag(target, chart = false) {
   let drag = null;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   target.addEventListener('pointerdown', event => {
+    if (chart && chartView !== 'history') return;
     if (event.button !== 0 || !event.isPrimary || !records.length) return;
     let mode = chart ? 'chart' : 'pan';
     const rect = target.getBoundingClientRect();
