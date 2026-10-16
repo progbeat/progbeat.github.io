@@ -119,13 +119,14 @@ button:focus-visible, input:focus-visible, [role=slider]:focus-visible, #chart:f
 .light { display: block; width: var(--light-size); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(ellipse at 40% 26%, #3b3b3b, #303030 70%); }
 .light.on { background: radial-gradient(ellipse at 40% 26%, #ff1834, #ff0026 72%); box-shadow: 0 0 22px #ff002659; }
 .result-area { position: fixed; bottom: calc(50dvh + var(--light-size) / 2 + clamp(42px, 6dvh, 72px)); left: 50vw; transform: translateX(-50%); width: min(700px, calc(100vw - 28px)); pointer-events: auto; }
-#result-value { font-family: 'Roboto Mono', monospace; font-size: clamp(80px, 8.3334vw, 120px); font-weight: 400; line-height: 1.05; letter-spacing: -.04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-#result-value span { display: inline-block; margin-left: .35em; font-family: Arial, Helvetica, sans-serif; font-size: .28em; font-weight: 400; letter-spacing: 0; color: #bbb; }
+#result-value { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); align-items: baseline; font-family: 'Roboto Mono', monospace; font-size: clamp(80px, 8.3334vw, 120px); font-weight: 400; line-height: 1.05; letter-spacing: -.04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#result-number { grid-row: 1; grid-column: 2; }
+#result-unit { grid-row: 1; grid-column: 3; justify-self: start; margin-left: .35em; font-family: Arial, Helvetica, sans-serif; font-size: .28em; font-weight: 400; letter-spacing: 0; color: #bbb; }
 #start-hint { margin: 13px 0 0; color: #aaa; font-size: clamp(15px, 2.4vw, 20px); line-height: 1.35; }
 .best-summary { display: flex; justify-content: center; align-items: baseline; gap: 17px; margin-top: 18px; font-size: 13px; line-height: 1.4; color: #999; white-space: nowrap; }
 .best-summary strong { color: #ccc; font-weight: 400; }
 .best-label { color: #ccc; }
-.stage.false-start #result-value, .stage.false-start #result-value span { color: #ff0026; }
+.stage.false-start #result-value, .stage.false-start #result-unit { color: #ff0026; }
 .stage.long-score #result-value { font-size: clamp(40px, 7vw, 68px); letter-spacing: -.04em; }
 .history-workspace { position: fixed; z-index: 2; top: calc(50dvh + var(--light-size) / 2 + 48px); bottom: 0; left: 0; right: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable both-edges; scrollbar-color: #444 #000; scrollbar-width: thin; padding: 0 clamp(16px, 4vw, 48px) 30px; }
 .chart-area, .table-area, #storage-note { max-width: 1160px; margin-left: auto; margin-right: auto; min-width: 0; }
@@ -249,7 +250,7 @@ body.is-running .input-trace { display: none; }
   <main class="app">
     <section class="stage" tabindex="0" aria-label="Reaction test. Press a key, mouse button, or touch to start.">
       <div class="lights" role="img" aria-label="All five lights off"><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i><i class="light"></i></div>
-      <div class="result-area"><div id="result-value">—<span> ms</span></div><p id="start-hint">Open in a browser to play — this preview may not run JavaScript.</p><div class="best-summary" aria-label="Personal bests in milliseconds"><span class="best-label">Best:</span><span>single <strong id="best-single">—</strong></span><span>ao5 <strong id="best-ao5">—</strong></span><span>ao12 <strong id="best-ao12">—</strong></span></div></div>
+      <div class="result-area"><div id="result-value"><span id="result-number">—</span><span id="result-unit"> ms</span></div><p id="start-hint">Open in a browser to play — this preview may not run JavaScript.</p><div class="best-summary" aria-label="Personal bests in milliseconds"><span class="best-label">Best:</span><span>single <strong id="best-single">—</strong></span><span>ao5 <strong id="best-ao5">—</strong></span><span>ao12 <strong id="best-ao12">—</strong></span></div></div>
     </section>
     <div class="history-workspace" data-control aria-label="Statistics and history">
       <section class="chart-area" aria-label="Reaction graph and history browsing">
@@ -1161,8 +1162,7 @@ function renderState() {
   if (engine.active) return;
   stage.classList.toggle('false-start', Boolean(lastRecord?.falseStart) && engine.state !== 'cancelled');
   stage.classList.toggle('long-score', Boolean(lastRecord) && String(Math.round(lastRecord.scoreMs)).length > 4);
-  $('#result-value').replaceChildren(document.createTextNode(lastRecord ? String(Math.round(lastRecord.scoreMs)) : '—'));
-  const unit = document.createElement('span'); unit.textContent = ' ms'; $('#result-value').append(unit);
+  $('#result-number').textContent = lastRecord ? String(Math.round(lastRecord.scoreMs)) : '—';
   $('#start-hint').textContent = engine.state === 'cancelled' ? `${engine.cancelReason}. Press or touch anywhere.` : lastRecord?.falseStart ? 'False start · press or touch anywhere' : 'Press or touch anywhere';
   if (engine.state === 'result') $('#announcement').textContent = `${lastRecord.falseStart ? 'False start, penalty' : 'Reaction'} ${Math.round(lastRecord.scoreMs)} milliseconds`;
 }
