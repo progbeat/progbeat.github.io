@@ -160,6 +160,7 @@ class ReactionEngine {
     this.generation = 0;
     this.timer = this.frame = null;
     this.held = new Map();
+    this.heldSince = new Map();
     this.releaseIds = new Set();
     this.roundInputs = new Set();
     this.attempt = null;
@@ -200,6 +201,7 @@ class ReactionEngine {
     if (edge === 'down') {
       if (wasHeld) return;
       this.held.set(event.inputId, event.device);
+      this.heldSince.set(event.inputId, Number.isFinite(event.eventTimeMs) ? event.eventTimeMs : null);
       if (!this.active) {
         this.stopScheduled();
         this.beginCountdown(event);
@@ -207,7 +209,11 @@ class ReactionEngine {
       }
     } else {
       if (!wasHeld) return;
-      this.held.delete(event.inputId);
+      // A queued up from an older press must not retire the current press of
+      // this same input. Otherwise its next duplicate down becomes a new edge.
+      const pressedAt = this.heldSince.get(event.inputId);
+      if (Number.isFinite(pressedAt) && Number.isFinite(event.eventTimeMs) && event.eventTimeMs < pressedAt) return;
+      this.forgetInput(event.inputId);
     }
     if (!this.active) { this.onChange(this); return; }
     if (event.eventTimeMs !== null && event.eventTimeMs < this.attempt.startedAtMs) return;
@@ -347,7 +353,8 @@ class ReactionEngine {
     this.onChange(this);
   }
 
-  clearHeld() { this.held.clear(); this.roundInputs.clear(); this.releaseIds.clear(); }
+  forgetInput(inputId) { this.held.delete(inputId); this.heldSince.delete(inputId); }
+  clearHeld() { this.held.clear(); this.heldSince.clear(); this.roundInputs.clear(); this.releaseIds.clear(); }
 }
 
 const RECENT_LIMIT = 1000;
@@ -496,21 +503,79 @@ function bestSnapshot(state) {
   return { version: 1, bestRecords: state.bestRecords, lifetimeBests: state.lifetimeBests, totalAttempts: state.totalAttempts, rollingScores: state.rollingScores, latest: state.latest, pendingRecent: state.pendingRecent || [] };
 }
 
+const keyAliases = { Spacebar: ' ', Esc: 'Escape', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Del: 'Delete', OS: 'Meta' };
+function keyboardDescription(event) {
+  const key = keyAliases[event.key] || event.key || '';
+  const code = event.code === 'Unidentified' ? '' : event.code === 'Spacebar' ? 'Space' : event.code || '';
+  const value = Number(event.keyCode || event.which);
+  return { code, key: key.length === 1 ? key.toLowerCase() : key, location: Number(event.location) || 0, legacy: Number.isInteger(value) && value > 0 && value !== 229 ? value : 0 };
+}
+
+// Keep one identity for a physical press, even if code availability or text
+// changes between its DOM events. Distinct known codes never alias each other.
+function createKeyboardTracker() {
+  const pressed = new Map();
+  const legacyId = value => `${value.location}:${value.legacy}`;
+  function find(value) {
+    const exact = value.code && [...pressed.values()].find(press => press.code === value.code);
+    if (exact) return { press: exact };
+    const matches = [...pressed.values()].filter(press => {
+      if (value.code && press.code && value.code !== press.code) return false;
+      if (!press.locations.has(value.location)) return false;
+      if (value.legacy && press.legacy.size) return press.legacy.has(legacyId(value));
+      return Boolean(value.key) && press.keys.has(value.key);
+    });
+    return matches.length > 1 ? { ambiguous: true } : { press: matches[0] };
+  }
+  function remember(press, value) {
+    if (value.code) press.code = value.code;
+    if (value.legacy) press.legacy.add(legacyId(value));
+    if (value.key) press.keys.add(value.key);
+    press.locations.add(value.location);
+  }
+  return {
+    down(event, eventTime) {
+      const value = keyboardDescription(event), found = find(value);
+      if (found.ambiguous) return found;
+      if (found.press) {
+        if (!Number.isFinite(found.press.at) || !Number.isFinite(eventTime) || eventTime >= found.press.at) remember(found.press, value);
+        return { id: found.press.id, fresh: false };
+      }
+      if (!value.code && !value.legacy && !value.key) return { ambiguous: true };
+      const id = value.code ? `key:${value.code}` : value.legacy ? `key:vk:${legacyId(value)}` : `key:text:${value.location}:${value.key}`;
+      const press = { id, code: '', legacy: new Set(), keys: new Set(), locations: new Set(), at: eventTime };
+      remember(press, value); pressed.set(id, press);
+      return { id, fresh: !event.repeat };
+    },
+    up(event, eventTime) {
+      const found = find(keyboardDescription(event));
+      if (found.ambiguous || !found.press) return found;
+      if (Number.isFinite(found.press.at) && Number.isFinite(eventTime) && eventTime < found.press.at) return { id: found.press.id, stale: true };
+      pressed.delete(found.press.id); return { id: found.press.id };
+    },
+    clear() { pressed.clear(); },
+  };
+}
+
 // One trusted stream per device. Mouse chords produce pointermove events.
 function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
   const controls = 'button, a, input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [data-control]';
   const isControl = event => event.composedPath().some(node => node instanceof Element && node.matches(controls));
-  const reserved = event => (event.shiftKey && /^(Space|Arrow.*|Home|End|PageUp|PageDown|Enter)$/.test(event.code)) || event.ctrlKey || event.metaKey || event.altKey || event.isComposing || /^(Tab|Escape|Shift|Control|Alt|Meta|CapsLock|NumLock|ScrollLock|ContextMenu|PrintScreen|Pause|Dead|Unidentified|F\d{1,2}|Audio.*|Media.*|Browser.*)$/.test(event.key);
-  const contacts = new Set();
-  const send = (edge, event, device, inputId, handledAt) => {
-    if (edge === 'down' && !engine.active && !engine.held.has(inputId)) onStart();
-    engine.input(edge, eventData(event, handledAt, device, inputId));
+  const reserved = event => {
+    const key = keyAliases[event.key] || event.key || event.code || '';
+    return (event.shiftKey && /^( |Space|Arrow.*|Home|End|PageUp|PageDown|Enter)$/.test(key)) || event.ctrlKey || event.metaKey || event.altKey || event.isComposing || /^(Tab|Escape|Shift|Control|Alt|Meta|CapsLock|NumLock|ScrollLock|ContextMenu|PrintScreen|Pause|Dead|Unidentified|F\d{1,2}|Audio.*|Media.*|Browser.*)$/.test(key);
   };
-  const cancel = reason => { engine.cancel(reason); engine.clearHeld(); contacts.clear(); };
+  const contacts = new Set();
+  const keyboard = createKeyboardTracker();
+  const send = (edge, event, device, inputId, handledAt, preparedData) => {
+    if (edge === 'down' && !engine.active && !engine.held.has(inputId)) onStart();
+    engine.input(edge, preparedData ? { ...preparedData, inputId } : eventData(event, handledAt, device, inputId));
+  };
+  const cancel = (reason, resetKeyboard = false) => { engine.cancel(reason); engine.clearHeld(); contacts.clear(); if (resetKeyboard) keyboard.clear(); };
   document.addEventListener('keydown', event => {
     const handledAt = performance.now();
     if (!event.isTrusted) return;
-    if (event.key === 'Escape') {
+    if ((keyAliases[event.key] || event.key) === 'Escape') {
       if (engine.active && !isControl(event)) event.preventDefault();
       engine.cancel('Attempt cancelled'); return;
     }
@@ -518,18 +583,22 @@ function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
       if (engine.active && (event.ctrlKey || event.metaKey || event.altKey)) cancel('Browser shortcut');
       return;
     }
+    const data = eventData(event, handledAt, 'keyboard', null), press = keyboard.down(event, data.eventTimeMs);
+    if (press.ambiguous) { if (engine.active) cancel('Ambiguous keyboard input'); return; }
     if (isControl(event)) return;
     event.preventDefault();
     surface.classList.remove('pointer-focused');
-    if (!event.repeat) send('down', event, 'keyboard', `key:${event.code || event.key}`, handledAt);
+    if (press.fresh) send('down', event, 'keyboard', press.id, handledAt, data);
   });
   document.addEventListener('keyup', event => {
     const handledAt = performance.now();
     if (!event.isTrusted) return;
-    const id = `key:${event.code || event.key}`;
-    if (!engine.held.has(id)) return;
+    const data = eventData(event, handledAt, 'keyboard', null), press = keyboard.up(event, data.eventTimeMs);
+    if (press.ambiguous) { if (engine.active) cancel('Ambiguous keyboard input'); return; }
+    const id = press.id;
+    if (!id || press.stale || !engine.held.has(id)) return;
     if (reserved(event) || isControl(event)) { cancel('Focus moved to a control'); return; }
-    event.preventDefault(); send('up', event, 'keyboard', id, handledAt);
+    event.preventDefault(); send('up', event, 'keyboard', id, handledAt, data);
   });
   function capture(event) {
     surface.classList.add('pointer-focused');
@@ -603,7 +672,7 @@ function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
       : [`pointer:${event.pointerId}`].filter(id => engine.held.has(id));
     const current = ids.some(id => engine.roundInputs.has(id));
     if (engine.active && current) cancel(reason);
-    else for (const id of ids) engine.held.delete(id); // retired response tail
+    else for (const id of ids) engine.forgetInput(id); // retired response tail
   }
   document.addEventListener('pointercancel', event => {
     if (!event.isTrusted) return;
@@ -615,9 +684,9 @@ function bindInputs({ engine, surface, eventData, onStart = () => {} }) {
   for (const type of ['click', 'auxclick', 'contextmenu', 'dragstart']) document.addEventListener(type, event => {
     if (!isControl(event) && !(event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) event.preventDefault();
   });
-  window.addEventListener('blur', () => cancel('Window lost focus'));
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel('Tab became hidden'); });
-  window.addEventListener('pagehide', () => cancel('Page closed'));
+  window.addEventListener('blur', () => cancel('Window lost focus', true));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel('Tab became hidden', true); });
+  window.addEventListener('pagehide', () => cancel('Page closed', true));
 }
 
 
