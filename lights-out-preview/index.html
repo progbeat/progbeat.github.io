@@ -125,13 +125,6 @@ button:focus-visible, input:focus-visible, [role=slider]:focus-visible, #chart:f
 #result-number { grid-row: 1; grid-column: 2; }
 #result-unit { grid-row: 1; grid-column: 3; justify-self: start; margin-left: .35em; font-family: Arial, Helvetica, sans-serif; font-size: .28em; font-weight: 400; letter-spacing: 0; color: #bbb; }
 #start-hint { margin: 13px 0 0; color: #aaa; font-size: clamp(15px, 2.4vw, 20px); line-height: 1.35; }
-html[data-runtime=ready] #start-hint { height: 1.35em; display: flex; align-items: center; justify-content: center; }
-.hint-symbols { display: inline-flex; align-items: center; justify-content: center; gap: .75em; line-height: 0; }
-.hint-symbols .device-icon { width: 1.2em; height: 1.2em; }
-.device-icon { flex: none; }
-.device-icon .icon-shell { fill: currentColor; }
-.device-icon .icon-detail { stroke: #000; }
-.hint-symbols .icon-contact { opacity: .7; }
 .best-summary { display: flex; justify-content: center; align-items: baseline; gap: 17px; margin-top: 18px; font-size: 13px; line-height: 1.4; color: #999; white-space: nowrap; }
 .best-summary strong { color: #ccc; font-weight: 400; }
 .best-label { color: #ccc; }
@@ -187,9 +180,11 @@ tr.false-start { color: #ff0026; } tr.false-start td { font-weight: 600; }
 .score-cell { position: relative; }
 table th:nth-child(2), table td:nth-child(2) { padding-right: 24px; }
 table th:last-child, table td:last-child { text-align: center; padding-left: 4px; padding-right: 4px; }
-.input-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px; height: 1em; line-height: 0; vertical-align: middle; }
-.input-mark .device-icon { width: 1.35em; height: 1.35em; }
-.input-mark .response-icon { width: .7em; height: 1em; }
+#history-rows td:last-child .input-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px; height: 1em; line-height: 0; vertical-align: middle; }
+#history-rows td:last-child .input-mark .device-icon { flex: none; width: 1.35em; height: 1.35em; }
+#history-rows td:last-child .input-mark .icon-shell { fill: currentColor; }
+#history-rows td:last-child .input-mark .icon-detail { stroke: #000; }
+#history-rows td:last-child .input-mark .response-icon { width: .7em; height: 1em; }
 .false-start-marker { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 400; letter-spacing: .3px; color: #ff6579; }
 #storage-note { color: #aaa; font-size: 12px; margin-top: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -1126,26 +1121,6 @@ let lastFrameHandledAt = performance.now();
 const MAX_FRAME_GAP_MS = 100;
 const inputTrace = createInputTrace(new URLSearchParams(location.search).get('trace') === '1');
 const mobilePage = matchMedia('(max-width:760px), (max-width:1000px) and (hover:none) and (pointer:coarse)');
-const touchHint = matchMedia('(hover:none) and (pointer:coarse)');
-let hintSignature = '';
-function renderInputHint() {
-  const hint = $('#start-hint'), devices = touchHint.matches ? ['touch'] : ['keyboard', 'mouse'];
-  const signature = `${devices.join(':')}:${engine.active}`;
-  if (signature !== hintSignature) {
-    hint.replaceChildren();
-    const symbols = document.createElement('span'); symbols.className = 'hint-symbols'; symbols.setAttribute('aria-hidden', 'true');
-    symbols.innerHTML = devices.map(deviceIconMarkup).join(''); hint.append(symbols);
-    hint.setAttribute('role', 'img'); hint.dataset.held = String(engine.active); hintSignature = signature;
-  }
-  const action = engine.active ? 'Keep holding' : 'Press and hold';
-  const devicesLabel = touchHint.matches ? 'your finger' : 'a key or mouse button';
-  const status = engine.state === 'cancelled' ? `${engine.cancelReason}. ` : !engine.active && lastRecord?.falseStart ? 'False start. ' : '';
-  const label = `${status}${action} ${devicesLabel}. Release when the lights go out.`;
-  if (hint.getAttribute('aria-label') !== label) {
-    hint.setAttribute('aria-label', label); hint.title = label;
-  }
-}
-touchHint.addEventListener('change', () => { if (!engine.active) renderInputHint(); });
 let scrollLocked = false, savedPageScroll = 0, shadeFrame = null;
 let idleViewportWidth = 0, idleViewportHeight = 0, shadeRamp = 1;
 function captureIdleViewport(force = false) {
@@ -1233,7 +1208,7 @@ function renderState() {
   inputTrace?.state();
   updateRoundScroll();
   stage.dataset.state = engine.state;
-  renderInputHint();
+  $('#start-hint').textContent = engine.active ? 'Keep holding' : engine.state === 'cancelled' ? `${engine.cancelReason}. Press and hold` : lastRecord?.falseStart ? 'False start · Press and hold' : 'Press and hold';
   if (engine.state === 'signal') { $('.lights').setAttribute('aria-label', 'All five lights off'); return; }
   if (renderedLights !== engine.lights) {
     lights.forEach((light, index) => light.classList.toggle('on', index < engine.lights));
