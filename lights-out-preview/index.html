@@ -125,6 +125,13 @@ button:focus-visible, input:focus-visible, [role=slider]:focus-visible, #chart:f
 #result-number { grid-row: 1; grid-column: 2; }
 #result-unit { grid-row: 1; grid-column: 3; justify-self: start; margin-left: .35em; font-family: Arial, Helvetica, sans-serif; font-size: .28em; font-weight: 400; letter-spacing: 0; color: #bbb; }
 #start-hint { margin: 13px 0 0; color: #aaa; font-size: clamp(15px, 2.4vw, 20px); line-height: 1.35; }
+html[data-runtime=ready] #start-hint { height: 1.35em; display: flex; align-items: center; justify-content: center; }
+.hint-symbols { display: inline-flex; align-items: center; justify-content: center; gap: .75em; line-height: 0; }
+.hint-symbols .device-icon { width: 1.2em; height: 1.2em; }
+.device-icon { flex: none; }
+.device-icon .icon-shell { fill: currentColor; }
+.device-icon .icon-detail { stroke: #000; }
+.hint-symbols .icon-contact { opacity: .7; }
 .best-summary { display: flex; justify-content: center; align-items: baseline; gap: 17px; margin-top: 18px; font-size: 13px; line-height: 1.4; color: #999; white-space: nowrap; }
 .best-summary strong { color: #ccc; font-weight: 400; }
 .best-label { color: #ccc; }
@@ -180,6 +187,9 @@ tr.false-start { color: #ff0026; } tr.false-start td { font-weight: 600; }
 .score-cell { position: relative; }
 table th:nth-child(2), table td:nth-child(2) { padding-right: 24px; }
 table th:last-child, table td:last-child { text-align: center; padding-left: 4px; padding-right: 4px; }
+.input-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px; height: 1em; line-height: 0; vertical-align: middle; }
+.input-mark .device-icon { width: 1.35em; height: 1.35em; }
+.input-mark .response-icon { width: .7em; height: 1em; }
 .false-start-marker { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 400; letter-spacing: .3px; color: #ff6579; }
 #storage-note { color: #aaa; font-size: 12px; margin-top: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -1067,14 +1077,34 @@ function createInputTrace(enabled) {
   return api;
 }
 
+// Local monochrome symbols: no font, image, CDN or device-dependent emoji.
+const deviceNames = { keyboard: 'Keyboard', mouse: 'Mouse', 'mouse-physical': 'Mouse', touch: 'Touch', pen: 'Pen', trackpad: 'Trackpad' };
+const shapes = {
+  keyboard: '<rect class="icon-shell" x="2" y="5" width="20" height="14" rx="2"/><path class="icon-detail" d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/>',
+  mouse: '<rect class="icon-shell" x="6" y="2" width="12" height="20" rx="6"/><path class="icon-detail" d="M6 10h12M12 5v2"/>',
+  touch: '<path class="icon-shell" d="M9 14V5a2 2 0 0 1 4 0v6l1.1-.4a2 2 0 0 1 1.8.3l3.3 2.2a2 2 0 0 1 .8 1.6V18a4 4 0 0 1-4 4h-4a4 4 0 0 1-3.4-1.9L4.7 15a1.8 1.8 0 0 1 2.8-2.2L9 14Z"/><path class="icon-contact" d="M6 6a5 5 0 0 1 10 0"/>',
+  pen: '<path class="icon-shell" d="m4 20 1.2-5L17.1 3.1a2.1 2.1 0 0 1 3 3L8.2 18 4 20Z"/><path class="icon-detail" d="m14.5 5.7 3 3M5.2 15l3 3"/>',
+  trackpad: '<rect class="icon-shell" x="3" y="4" width="18" height="16" rx="2"/><path class="icon-detail" d="M3 15h18M12 15v5"/>',
+  unknown: '<circle class="icon-shell" cx="12" cy="12" r="9"/><path class="icon-detail" d="M9.8 9a2.3 2.3 0 1 1 3.4 2c-1 .6-1.2 1-1.2 2M12 16h.01"/>',
+};
+function deviceIconMarkup(device) {
+  const name = device === 'mouse-physical' ? 'mouse' : Object.hasOwn(shapes, device) ? device : 'unknown';
+  return `<svg class="device-icon" data-device="${name}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${shapes[name]}</svg>`;
+}
+function responseIconMarkup(edge) {
+  const path = edge === 'up' ? 'M12 20V4m-5 5 5-5 5 5' : 'M12 4v16m-5-5 5 5 5-5';
+  return `<svg class="response-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
+}
+function inputLabel(record) {
+  return `${deviceNames[record.device] || record.device || 'Unknown input'}, ${record.responseEdge === 'up' ? 'release' : 'press'}`;
+}
+
 
 const $ = selector => document.querySelector(selector);
 const stage = $('.stage');
 const workspace = $('.history-workspace');
 const lights = [...document.querySelectorAll('.light')];
 const storageKey = 'lights-out.preview.hold-release.recent.v1';
-const deviceLabel = { keyboard: 'Key', mouse: 'Mouse', touch: 'Touch', pen: 'Pen', trackpad: 'Trackpad', 'mouse-physical': 'Mouse' };
-const inputLabel = record => `${deviceLabel[record.device] || record.device} ${record.responseEdge === 'up' ? '↑' : '↓'}`;
 const uuid = () => globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const bestStorageKey = 'lights-out.preview.hold-release.bests.v1';
 const resetStorageKey = 'lights-out.preview.hold-release.reset.v1';
@@ -1096,6 +1126,26 @@ let lastFrameHandledAt = performance.now();
 const MAX_FRAME_GAP_MS = 100;
 const inputTrace = createInputTrace(new URLSearchParams(location.search).get('trace') === '1');
 const mobilePage = matchMedia('(max-width:760px), (max-width:1000px) and (hover:none) and (pointer:coarse)');
+const touchHint = matchMedia('(hover:none) and (pointer:coarse)');
+let hintSignature = '';
+function renderInputHint() {
+  const hint = $('#start-hint'), devices = touchHint.matches ? ['touch'] : ['keyboard', 'mouse'];
+  const signature = `${devices.join(':')}:${engine.active}`;
+  if (signature !== hintSignature) {
+    hint.replaceChildren();
+    const symbols = document.createElement('span'); symbols.className = 'hint-symbols'; symbols.setAttribute('aria-hidden', 'true');
+    symbols.innerHTML = devices.map(deviceIconMarkup).join(''); hint.append(symbols);
+    hint.setAttribute('role', 'img'); hint.dataset.held = String(engine.active); hintSignature = signature;
+  }
+  const action = engine.active ? 'Keep holding' : 'Press and hold';
+  const devicesLabel = touchHint.matches ? 'your finger' : 'a key or mouse button';
+  const status = engine.state === 'cancelled' ? `${engine.cancelReason}. ` : !engine.active && lastRecord?.falseStart ? 'False start. ' : '';
+  const label = `${status}${action} ${devicesLabel}. Release when the lights go out.`;
+  if (hint.getAttribute('aria-label') !== label) {
+    hint.setAttribute('aria-label', label); hint.title = label;
+  }
+}
+touchHint.addEventListener('change', () => { if (!engine.active) renderInputHint(); });
 let scrollLocked = false, savedPageScroll = 0, shadeFrame = null;
 let idleViewportWidth = 0, idleViewportHeight = 0, shadeRamp = 1;
 function captureIdleViewport(force = false) {
@@ -1183,7 +1233,7 @@ function renderState() {
   inputTrace?.state();
   updateRoundScroll();
   stage.dataset.state = engine.state;
-  $('#start-hint').textContent = engine.active ? 'Keep holding' : engine.state === 'cancelled' ? `${engine.cancelReason}. Press and hold` : lastRecord?.falseStart ? 'False start · Press and hold' : 'Press and hold';
+  renderInputHint();
   if (engine.state === 'signal') { $('.lights').setAttribute('aria-label', 'All five lights off'); return; }
   if (renderedLights !== engine.lights) {
     lights.forEach((light, index) => light.classList.toggle('on', index < engine.lights));
@@ -1370,7 +1420,7 @@ function renderHistory() {
   for (const row of rows) {
     const tr = document.createElement('tr'); tr.classList.toggle('false-start', row.record.falseStart);
     tr.dataset.round = row.round;
-    const values = [row.round, Math.round(row.record.scoreMs), formatAverage(row.ao5), formatAverage(row.ao12), inputLabel(row.record)];
+    const values = [row.round, Math.round(row.record.scoreMs), formatAverage(row.ao5), formatAverage(row.ao12), ''];
     for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
     tr.children[1].className = 'score-cell';
     if (row.record.falseStart) {
@@ -1380,6 +1430,9 @@ function renderHistory() {
     }
     tr.lastChild.title = inputLabel(row.record);
     tr.lastChild.setAttribute('aria-label', inputLabel(row.record));
+    const inputMark = document.createElement('span'); inputMark.className = 'input-mark'; inputMark.setAttribute('aria-hidden', 'true');
+    inputMark.innerHTML = deviceIconMarkup(row.record.device) + responseIconMarkup(row.record.responseEdge);
+    tr.lastChild.append(inputMark);
     body.append(tr);
   }
   renderChart(chartRows);
