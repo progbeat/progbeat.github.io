@@ -135,7 +135,6 @@ button:focus-visible, input:focus-visible, [role=slider]:focus-visible, #chart:f
    without a per-scroll geometry update. Its span covers the entire upper area. */
 .history-workspace::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: var(--shade-span, 0px); background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.015625) 12.5%, rgba(0,0,0,.0625) 25%, rgba(0,0,0,.140625) 37.5%, rgba(0,0,0,.25) 50%, rgba(0,0,0,.390625) 62.5%, rgba(0,0,0,.5625) 75%, rgba(0,0,0,.765625) 87.5%, #000 100%); opacity: var(--shade-strength, 0); will-change: opacity; pointer-events: none; }
 .chart-area, .table-area, #storage-note { max-width: 1160px; margin-left: auto; margin-right: auto; min-width: 0; }
-.preview-notice { max-width: 1160px; margin: 0 auto 12px; color: #aaa; font-size: 12px; line-height: 1.4; }
 .chart-area { touch-action: pan-y; }
 .chart-toolbar { display: flex; flex-wrap: wrap; gap: 13px 24px; align-items: center; margin-bottom: 8px; }
 .chart-tabs, .history-tabs { display: flex; gap: 20px; }
@@ -253,7 +252,6 @@ body.is-running .input-trace { display: none; }
       <div class="result-area"><div id="result-value"><span id="result-number">—</span><span id="result-unit"> ms</span></div><p id="start-hint">Open in a browser to play — this preview may not run JavaScript.</p><div class="best-summary" aria-label="Personal bests in milliseconds"><span class="best-label">Best:</span><span>single <strong id="best-single">—</strong></span><span>ao5 <strong id="best-ao5">—</strong></span><span>ao12 <strong id="best-ao12">—</strong></span></div></div>
     </section>
     <div class="history-workspace" data-control aria-label="Statistics and history">
-      <p class="preview-notice">Preview · hold→release · separate history</p>
       <section class="chart-area" aria-label="Reaction graph and history browsing">
         <div class="chart-toolbar">
           <div class="chart-tabs" role="tablist" aria-label="Chart view"><button type="button" id="history-view" role="tab" aria-selected="true" aria-controls="chart-panel">History</button><button type="button" id="histogram-view" role="tab" aria-selected="false" aria-controls="chart-panel" tabindex="-1">Histogram</button></div>
