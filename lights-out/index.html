@@ -178,6 +178,10 @@ tr.false-start { color: #ff0026; } tr.false-start td { font-weight: 600; }
 .score-cell { position: relative; }
 table th:nth-child(2), table td:nth-child(2) { padding-right: 24px; }
 table th:last-child, table td:last-child { text-align: center; padding-left: 4px; padding-right: 4px; }
+#history-rows td:last-child .input-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px; height: 1em; line-height: 0; vertical-align: middle; }
+#history-rows td:last-child .input-mark .device-icon { flex: none; width: 1.35em; height: 1.35em; }
+#history-rows td:last-child .input-mark .icon-shell { fill: currentColor; }
+#history-rows td:last-child .input-mark .icon-detail { stroke: #000; }
 .false-start-marker { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 400; letter-spacing: .3px; color: #ff6579; }
 #storage-note { color: #aaa; font-size: 12px; margin-top: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -193,6 +197,7 @@ body.is-running { position: fixed; inset: 0; height: 100dvh; overflow: hidden; c
 body.is-running .stage { height: 100dvh; touch-action: none; }
 body.is-running * { cursor: none !important; }
 body.is-running .history-workspace, body.is-running .result-area, body.is-running #announcement { visibility: hidden; pointer-events: none; }
+body.is-running #start-hint { visibility: visible; }
 .input-trace { position: fixed; z-index: 10; bottom: 8px; right: 8px; left: 8px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 8px; background: #171717; border: 1px solid #555; color: #ddd; font: 12px Arial, sans-serif; }
 .input-trace button { border: 1px solid #777; border-radius: 3px; padding: 7px 10px; color: #eee; background: #292929; font: inherit; }
 body.is-running .input-trace { display: none; }
@@ -349,8 +354,8 @@ class ReactionEngine {
     this.timer = this.frame = null;
   }
 
-  // Every physical edge is tracked. Down starts the red preparation sequence.
-  // Each round owns its downs. Old held inputs can never leak releases into it.
+  // The starting press owns the round. Only its release can score; other
+  // physical edges are tracked so their held/release tails cannot restart it.
   input(edge, event) {
     const wasHeld = this.held.has(event.inputId);
     if (edge === 'down') {
@@ -362,6 +367,7 @@ class ReactionEngine {
         this.beginCountdown(event);
         return;
       }
+      return;
     } else {
       if (!wasHeld) return;
       // A queued up from an older press must not retire the current press of
@@ -372,26 +378,20 @@ class ReactionEngine {
     }
     if (!this.active) { this.onChange(this); return; }
     if (event.eventTimeMs !== null && event.eventTimeMs < this.attempt.startedAtMs) return;
-    if (edge === 'down') this.roundInputs.add(event.inputId);
-    if (edge === 'up' && !this.roundInputs.has(event.inputId)) return;
+    if (!this.roundInputs.has(event.inputId)) return;
     if (!this.guardTiming()) return;
-    if (this.state === 'countdown') {
-      this.onChange(this);
-      return;
-    }
-    // A queued preparation edge must not become a false start merely because
-    // its handler runs after the fifth light. Use the event's actual timestamp.
-    if (this.scoring && event.eventTimeMs !== null && event.eventTimeMs < this.attempt.allLightsOnMs) {
-      if (edge === 'up') this.releaseIds.delete(event.inputId);
-      else this.releaseIds.add(event.inputId);
-      this.onChange(this);
-      return;
-    }
-    if (!this.scoring || (edge === 'up' && !this.releaseIds.has(event.inputId))) return;
     if (event.eventTimeMs === null || !Number.isFinite(event.eventTimeMs)) {
       this.cancel('Event timestamp unavailable');
       return;
     }
+    // Classify by the physical release time, even if its handler is queued
+    // across the fifth-light or blackout callback. A short tap never arms a
+    // later response. Exact fifth-light onset belongs to the false-start phase.
+    if (this.attempt.allLightsOnMs === null || event.eventTimeMs < this.attempt.allLightsOnMs) {
+      this.cancel('Released before fifth light');
+      return;
+    }
+    if (!this.scoring || !this.releaseIds.has(event.inputId)) return;
     const onset = this.attempt.softwareOnsetMs;
     const falseStart = onset === null || event.eventTimeMs < onset;
     const reactionMs = falseStart ? null : event.eventTimeMs - onset;
@@ -804,6 +804,10 @@ function bindInputs({ engine, surface, eventData, onStart = () => {}, diagnostic
       if (isControl(event)) return;
       event.preventDefault(); capture(event);
       send('down', event, event.pointerType, id, handledAt);
+    } else if (event.type === 'pointermove') {
+      // A game contact keeps ownership while moving. The idle surface already
+      // has touch-action:none before down; capture alone cannot stop native pan.
+      if (engine.held.has(id) && event.cancelable) event.preventDefault();
     } else if (event.type === 'pointerup') {
       contacts.delete(event.pointerId);
       if (!engine.held.has(id)) return;
@@ -815,17 +819,24 @@ function bindInputs({ engine, surface, eventData, onStart = () => {}, diagnostic
   } else {
     // Legacy WebKit has Touch Events but no Pointer Events. Preventing the
     // accepted touchstart default suppresses its compatibility mouse stream.
-    for (const type of ['touchstart', 'touchend', 'touchcancel']) document.addEventListener(type, event => {
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) document.addEventListener(type, event => {
       const handledAt = performance.now();
       if (!event.isTrusted) return;
       if (type === 'touchcancel') { cancel('Touch cancelled'); return; }
       if (event.touches.length > 1) { cancel('Multiple contacts'); return; }
+      if (type === 'touchmove') {
+        if ([...event.changedTouches].some(touch => engine.held.has(`touch:${touch.identifier}`))) event.preventDefault();
+        return;
+      }
       if (type === 'touchstart' && isControl(event)) return;
       event.preventDefault();
       for (const touch of event.changedTouches) {
         const id = `touch:${touch.identifier}`;
-        if (type === 'touchstart') { surface.focus({ preventScroll: true }); send('down', event, 'touch', id, handledAt); }
-        else if (engine.held.has(id)) send('up', event, 'touch', id, handledAt);
+        if (type === 'touchstart') {
+          surface.focus({ preventScroll: true }); send('down', event, 'touch', id, handledAt);
+        } else {
+          if (engine.held.has(id)) send('up', event, 'touch', id, handledAt);
+        }
       }
     }, { passive: false });
     for (const type of ['mousedown', 'mouseup']) document.addEventListener(type, event => {
@@ -857,6 +868,21 @@ function bindInputs({ engine, surface, eventData, onStart = () => {}, diagnostic
     if (!isControl(event) && !(event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) event.preventDefault();
   });
   window.addEventListener('blur', () => cancel('Window lost focus', true));
+  window.addEventListener('wheel', event => {
+    if (!event.isTrusted || !engine.active || !(event.deltaX || event.deltaY)) return;
+    cancel('Scroll input');
+    if (event.ctrlKey || event.metaKey) return; // native zoom/shortcut
+    // The wheel target was locked when this event began. Carry this first
+    // delta into the restored document exactly once, then use native scrolling.
+    event.preventDefault();
+    const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
+    window.scrollBy({ left: event.deltaX * scale, top: event.deltaY * scale, behavior: 'instant' });
+  }, { passive: false });
+  window.addEventListener('scroll', () => {
+    // Locking a scrolled document resets its root position to zero. That is
+    // our own layout change; any remaining active page movement cancels.
+    if (engine.active && (scrollX !== 0 || scrollY !== 0)) cancel('Page scrolled');
+  }, { passive: true });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel('Tab became hidden', true); });
   window.addEventListener('pagehide', () => cancel('Page closed', true));
 }
@@ -1033,14 +1059,34 @@ function createInputTrace(enabled) {
   return api;
 }
 
+// Local monochrome symbols: no font, image, CDN or device-dependent emoji.
+const deviceNames = { keyboard: 'Keyboard', mouse: 'Mouse', 'mouse-physical': 'Mouse', touch: 'Touch', pen: 'Pen', trackpad: 'Trackpad' };
+const shapes = {
+  keyboard: '<rect class="icon-shell" x="2" y="5" width="20" height="14" rx="2"/><path class="icon-detail" d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/>',
+  mouse: '<rect class="icon-shell" x="6" y="2" width="12" height="20" rx="6"/><path class="icon-detail" d="M6 10h12M12 5v2"/>',
+  touch: '<path class="icon-shell" d="M9 14V5a2 2 0 0 1 4 0v6l1.1-.4a2 2 0 0 1 1.8.3l3.3 2.2a2 2 0 0 1 .8 1.6V18a4 4 0 0 1-4 4h-4a4 4 0 0 1-3.4-1.9L4.7 15a1.8 1.8 0 0 1 2.8-2.2L9 14Z"/><path class="icon-contact" d="M6 6a5 5 0 0 1 10 0"/>',
+  pen: '<path class="icon-shell" d="m4 20 1.2-5L17.1 3.1a2.1 2.1 0 0 1 3 3L8.2 18 4 20Z"/><path class="icon-detail" d="m14.5 5.7 3 3M5.2 15l3 3"/>',
+  trackpad: '<rect class="icon-shell" x="3" y="4" width="18" height="16" rx="2"/><path class="icon-detail" d="M3 15h18M12 15v5"/>',
+  unknown: '<circle class="icon-shell" cx="12" cy="12" r="9"/><path class="icon-detail" d="M9.8 9a2.3 2.3 0 1 1 3.4 2c-1 .6-1.2 1-1.2 2M12 16h.01"/>',
+};
+function deviceIconMarkup(device) {
+  const name = device === 'mouse-physical' ? 'mouse' : Object.hasOwn(shapes, device) ? device : 'unknown';
+  return `<svg class="device-icon" data-device="${name}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${shapes[name]}</svg>`;
+}
+function responseIconMarkup(edge) {
+  const path = edge === 'up' ? 'M12 20V4m-5 5 5-5 5 5' : 'M12 4v16m-5-5 5 5 5-5';
+  return `<svg class="response-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
+}
+function inputLabel(record) {
+  return `${deviceNames[record.device] || record.device || 'Unknown input'}, ${record.responseEdge === 'up' ? 'release' : 'press'}`;
+}
+
 
 const $ = selector => document.querySelector(selector);
 const stage = $('.stage');
 const workspace = $('.history-workspace');
 const lights = [...document.querySelectorAll('.light')];
 const storageKey = 'lights-out.reaction-lab.v2';
-const deviceLabel = { keyboard: 'Key', mouse: 'Mouse', touch: 'Touch', pen: 'Pen', trackpad: 'Trackpad', 'mouse-physical': 'Mouse' };
-const inputLabel = record => `${deviceLabel[record.device] || record.device} ${record.responseEdge === 'up' ? '↑' : '↓'}`;
 const uuid = () => globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const bestStorageKey = 'lights-out.reaction-lab.bests.v1';
 const resetStorageKey = 'lights-out.reaction-lab.reset.v1';
@@ -1149,6 +1195,7 @@ function renderState() {
   inputTrace?.state();
   updateRoundScroll();
   stage.dataset.state = engine.state;
+  $('#start-hint').textContent = engine.state === 'signal' ? 'Release' : engine.active ? 'Hold' : 'Press and hold';
   if (engine.state === 'signal') { $('.lights').setAttribute('aria-label', 'All five lights off'); return; }
   if (renderedLights !== engine.lights) {
     lights.forEach((light, index) => light.classList.toggle('on', index < engine.lights));
@@ -1159,7 +1206,6 @@ function renderState() {
   stage.classList.toggle('false-start', Boolean(lastRecord?.falseStart) && engine.state !== 'cancelled');
   stage.classList.toggle('long-score', Boolean(lastRecord) && String(Math.round(lastRecord.scoreMs)).length > 4);
   $('#result-number').textContent = lastRecord ? String(Math.round(lastRecord.scoreMs)) : '—';
-  $('#start-hint').textContent = engine.state === 'cancelled' ? `${engine.cancelReason}. Press or touch anywhere.` : lastRecord?.falseStart ? 'False start · press or touch anywhere' : 'Press or touch anywhere';
   if (engine.state === 'result') $('#announcement').textContent = `${lastRecord.falseStart ? 'False start, penalty' : 'Reaction'} ${Math.round(lastRecord.scoreMs)} milliseconds`;
 }
 const svgNS = 'http://www.w3.org/2000/svg';
@@ -1336,7 +1382,7 @@ function renderHistory() {
   for (const row of rows) {
     const tr = document.createElement('tr'); tr.classList.toggle('false-start', row.record.falseStart);
     tr.dataset.round = row.round;
-    const values = [row.round, Math.round(row.record.scoreMs), formatAverage(row.ao5), formatAverage(row.ao12), inputLabel(row.record)];
+    const values = [row.round, Math.round(row.record.scoreMs), formatAverage(row.ao5), formatAverage(row.ao12), ''];
     for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
     tr.children[1].className = 'score-cell';
     if (row.record.falseStart) {
@@ -1346,6 +1392,9 @@ function renderHistory() {
     }
     tr.lastChild.title = inputLabel(row.record);
     tr.lastChild.setAttribute('aria-label', inputLabel(row.record));
+    const inputMark = document.createElement('span'); inputMark.className = 'input-mark'; inputMark.setAttribute('aria-hidden', 'true');
+    inputMark.innerHTML = deviceIconMarkup(row.record.device);
+    tr.lastChild.append(inputMark);
     body.append(tr);
   }
   renderChart(chartRows);
